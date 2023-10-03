@@ -150,6 +150,15 @@ def parse_el(el: ExNode) -> MacroElement:
         return LabelDef(get_ident(el))
     elif name == 'const_ref':
         return ConstRef(get_ident(el))
+    elif name == 'push_op':
+        num_node = child_get('num', el)
+        assert isinstance(num_node.children, str)
+        num = int(num_node.children)
+        assert num in range(0, 33), f'No PUSH{num}'
+        data = parse_hex_literal(child_get('hex_literal', el))
+        assert len(data) <= num, \
+            f'Literal 0x{data.hex()} too long for push{num}'
+        return Op(OP_MAP[f'push{num}'], b'\x00'*(num - len(data)) + data)
 
     raise ValueError(f'Unrecognized el name "{name}"')
 
