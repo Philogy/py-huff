@@ -196,18 +196,6 @@ def parse_macro(node: ExNode) -> Macro:
     return Macro(ident, args, els)
 
 
-def flatten(node: ExNode) -> ExNode:
-    if isinstance(node.children, str):
-        return node
-    new_children = []
-    for child in node.children:
-        if child.name == '' and isinstance(child.children, list):
-            new_children.extend(child.children)
-        else:
-            new_children.append(child)
-    return ExNode(node.name, new_children, node.start, node.end)
-
-
 def get_defs(name: str, root: ExNode) -> Generator[ExNode, None, None]:
     return (
         inner
