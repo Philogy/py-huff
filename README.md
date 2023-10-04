@@ -80,6 +80,8 @@ all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in
     - ✅ Nested macros (e.g. `A() -> B() -> C()`)
 - ✅ Runtime bytecode
 - ❌ Deploy bytecode
+    - ❌ Minimal deploy code
+    - ❌ Custom constructors
 ### Added Features
 - ❌ Tables
     - ✅ Code Tables

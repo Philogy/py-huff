@@ -155,6 +155,12 @@ class Op(NamedTuple('Op', [('op', int), ('extra_data', bytes)])):
         yield from self.extra_data
 
 
+def create_plain_op(op_name: str) -> Op:
+    assert not op_name.startswith('push') or op_name == 'push0', \
+        f'Standalone {op_name} not supported'
+    return Op(OP_MAP[op_name], b'')
+
+
 def create_push(data: bytes, size: int | None = None) -> Op:
     if size is None:
         size = len(data)
