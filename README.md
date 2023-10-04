@@ -81,12 +81,15 @@ all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in
 - ✅ Runtime bytecode
 - ❌ Deploy bytecode
 ### Added Features
+- ❌ Tables
+    - ✅ Code Tables
+    - ❌ Jump Tables (❌ normal, ❌ packed)
 - ❌ Built-ins
     - ❌ `__EVENT_HASH`
     - ❌ `__FUNC_SIG`
     - ❌ `__codesize`
-    - ❌ `__tablestart`
-    - ❌ `__tablesize`
+    - ✅ `__tablestart`
+    - ✅ `__tablesize`
 
 ### Niche/Advanced Features
 - ✅ Push literals (e.g. `push4 0x010`)

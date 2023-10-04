@@ -1,26 +1,35 @@
 from opcodes import OP_MAP, Op, create_push
 import sys
-from typing import NamedTuple, Any, Generator
-from parser import parse_huff, ExNode
+from typing import NamedTuple, Any, Generator, Callable
+from parser import parse_huff, ExNode, disp_node
 
 
 Identifier = str
 MacroParam = NamedTuple('MacroParam', [('ident', Identifier)])
-LabelRef = NamedTuple('LabelRef', [('ident', Identifier)])
+GeneralRef = NamedTuple('GeneralRef', [('ident', Identifier)])
 ConstRef = NamedTuple('ConstRef', [('ident', Identifier)])
 LabelDef = NamedTuple('LabelDef', [('ident', Identifier)])
+InvokeArg = Op | GeneralRef | MacroParam
 Invocation = NamedTuple(
     'Invocation',
-    [('ident', Identifier), ('args', list[Op | LabelRef | MacroParam])]
+    [('ident', Identifier), ('args', list[InvokeArg])]
 )
 
-MacroElement = Invocation | Op | MacroParam | LabelRef | LabelDef | ConstRef
+MacroElement = Invocation | Op | MacroParam | GeneralRef | LabelDef | ConstRef
 
 Macro = NamedTuple('Macro', [
     ('ident', Identifier),
     ('params', list[Identifier]),
     ('body', list[MacroElement])
 ])
+
+CodeTable = NamedTuple(
+    'CodeTable',
+    [
+        ('data', bytes),
+        ('top_level_id', int)
+    ]
+)
 
 
 def child_get_all(name: str, node: ExNode) -> Generator[ExNode, None, None]:
@@ -93,7 +102,7 @@ def parse_hex_literal(el: ExNode) -> bytes:
 
 def parse_call_arg(arg: ExNode):
     el = parse_el(arg)
-    assert isinstance(el, (LabelRef, Op, MacroParam)), \
+    assert isinstance(el, (GeneralRef, Op, MacroParam)), \
         f'Invalid call argument {el}'
     return el
 
@@ -115,10 +124,10 @@ def parse_el(el: ExNode) -> MacroElement:
         assert isinstance(ident, str)
         if ident in OP_MAP:
             assert not ident.startswith('push') or ident == 'push0', \
-                f'Standalone push "{ident}" not supported'
+                f'Standalone {ident} not supported'
             return Op(OP_MAP[ident], b'')
         else:
-            return LabelRef(identifier(ident))
+            return GeneralRef(identifier(ident))
     elif name == 'dest_definition':
         return LabelDef(get_ident(el))
     elif name == 'const_ref':
@@ -180,25 +189,81 @@ def get_defs(name: str, root: ExNode) -> Generator[ExNode, None, None]:
 
 
 ContextId = tuple[int, ...]
-DestId = tuple[ContextId, int]
-DestRef = NamedTuple('DestRef', [('ref', DestId)])
-Dest = NamedTuple('Dest', [('dest', DestId)])
-Asm = Op | Dest | DestRef
-MacroArg = Op | DestRef
+MarkId = tuple[ContextId, int]
+Mark = NamedTuple('Mark', [('mid', MarkId)])
+MarkRef = NamedTuple('MarkRef', [('ref', MarkId)])
+MarkDeltaRef = NamedTuple('MarkDeltaRef', [('start', MarkId), ('end', MarkId)])
+Asm = Op | Mark | MarkRef | MarkDeltaRef | bytes
+MacroArg = Op | MarkRef
+GlobalScope = NamedTuple(
+    'GlobalScope',
+    [
+        ('macros', dict[Identifier, Macro]),
+        ('constants', dict[Identifier, Op]),
+        ('code_tables', dict[Identifier, CodeTable])
+    ]
+)
+
+START_SUB_ID = 0
+END_SUB_ID = 1
+
+
+def not_implemented(fn_name, *_) -> list[Asm]:
+    return []
+    raise ValueError(f'Built-in {fn_name} not implemented yet')
+
+
+def table_start(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+    assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
+    arg, = args
+    assert isinstance(arg, GeneralRef), \
+        f'{name} does not support argument {arg}'
+    assert arg.ident in g.code_tables, f'Undefined table "{arg.ident}"'
+    # TODO: Support more tables
+    table = g.code_tables[arg.ident]
+    mid: MarkId = (table.top_level_id,), START_SUB_ID
+
+    return [MarkRef(mid)]
+
+
+def table_size(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+    assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
+    arg, = args
+    assert isinstance(arg, GeneralRef), \
+        f'{name} does not support argument {arg}'
+    assert arg.ident in g.code_tables, f'Undefined table "{arg.ident}"'
+    # TODO: Support more tables
+    table = g.code_tables[arg.ident]
+    start_mid: MarkId = (table.top_level_id,), START_SUB_ID
+    end_mid: MarkId = (table.top_level_id,), END_SUB_ID
+
+    return [MarkDeltaRef(start_mid, end_mid)]
+
+
+BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg]], list[Asm]]] = {
+    '__EVENT_HASH': not_implemented,
+    '__FUNC_SIG': not_implemented,
+    '__codesize': not_implemented,
+    '__tablestart': table_start,
+    '__tablesize': table_size
+}
+
+
+def invoke_built_in(fn_name: str, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+    return BUILT_INS[fn_name](fn_name, g, args)
 
 
 def gen_asm(
     macro_ident: Identifier,
-    macros: dict[Identifier, Macro],
-    constants: dict[Identifier, Op],
+    g: GlobalScope,
     args: list[MacroArg],
-    labels: dict[Identifier, DestId],
+    labels: dict[Identifier, MarkId],
     ctx_id: ContextId,
     visited_macros: tuple[Identifier, ...]
 ) -> list[Asm]:
     assert macro_ident not in visited_macros, f'Circular macro refrence in {macro_ident}'
-    assert macro_ident in macros, f'Unrecognized macro "{macro_ident}"'
-    macro = macros[macro_ident]
+    assert macro_ident in g.macros, f'Unrecognized macro "{macro_ident}"'
+    macro = g.macros[macro_ident]
     assert len(args) == len(macro.params), \
         f'macro "{macro_ident}" received {len(args)} args, expected {len(macro.params)}'
     visited_macros += (macro_ident,)
@@ -214,15 +279,15 @@ def gen_asm(
 
     for i, label_def in enumerate(el for el in macro.body if isinstance(el, LabelDef)):
         label = label_def.ident
-        dest_id = ctx_id, i
+        dest_id: MarkId = ctx_id, i
         # TODO: Add warning when invoked macro has label shadowing parent
         assert label not in labels or labels[label] != dest_id, \
             f'Duplicate label "{label}" in macro "{macro.ident}"'
         labels[label] = dest_id
 
-    def lookup_label(ident: Identifier) -> DestRef:
+    def lookup_label(ident: Identifier) -> MarkRef:
         assert ident in labels, f'Label "{ident}" not found in scope ({ctx_id})'
-        return DestRef(labels[ident])
+        return MarkRef(labels[ident])
 
     def lookup_arg(ident: Identifier) -> MacroArg:
         assert ident in ident_to_arg, f'Invalid macro argument "{ident}"'
@@ -233,39 +298,43 @@ def gen_asm(
         if isinstance(el, Op):
             asm.append(el)
         elif isinstance(el, LabelDef):
-            asm.extend([Dest(labels[el.ident]), Op(OP_MAP['jumpdest'], b'')])
-        elif isinstance(el, LabelRef):
+            asm.extend([Mark(labels[el.ident]), Op(OP_MAP['jumpdest'], b'')])
+        elif isinstance(el, GeneralRef):
             asm.append(lookup_label(el.ident))
         elif isinstance(el, MacroParam):
             asm.append(lookup_arg(el.ident))
         elif isinstance(el, ConstRef):
-            assert el.ident in constants, f'Constant "{el.ident}" not found'
-            asm.append(constants[el.ident])
+            assert el.ident in g.constants, f'Constant "{el.ident}" not found'
+            asm.append(g.constants[el.ident])
         elif isinstance(el, Invocation):
-            invoke_args: list[MacroArg] = []
-            for arg in el.args:
-                if isinstance(arg, LabelRef):
-                    invoke_args.append(lookup_label(arg.ident))
-                elif isinstance(arg, MacroParam):
-                    invoke_args.append(lookup_arg(arg.ident))
-                elif isinstance(arg, Op):
-                    invoke_args.append(arg)
-                else:
-                    raise TypeError(
-                        f'Unrecognized macro invocation argument {arg}')
-
-            asm.extend(
-                gen_asm(
-                    el.ident,
-                    macros,
-                    constants,
-                    invoke_args,
-                    labels.copy(),
-                    ctx_id + (idx, ),
-                    visited_macros
+            if el.ident in BUILT_INS:
+                asm.extend(
+                    invoke_built_in(el.ident, g, el.args)
                 )
-            )
-            idx += 1
+            else:
+                invoke_args: list[MacroArg] = []
+                for arg in el.args:
+                    if isinstance(arg, GeneralRef):
+                        invoke_args.append(lookup_label(arg.ident))
+                    elif isinstance(arg, MacroParam):
+                        invoke_args.append(lookup_arg(arg.ident))
+                    elif isinstance(arg, Op):
+                        invoke_args.append(arg)
+                    else:
+                        raise TypeError(
+                            f'Unrecognized macro invocation argument {arg}')
+
+                asm.extend(
+                    gen_asm(
+                        el.ident,
+                        g,
+                        invoke_args,
+                        labels.copy(),
+                        ctx_id + (idx, ),
+                        visited_macros
+                    )
+                )
+                idx += 1
         else:
             raise TypeError(f'Unrecognized macro element {el}')
 
@@ -274,7 +343,7 @@ def gen_asm(
 
 def get_min_dest_bytes(asm: list[Asm]) -> int:
     '''Compute the minimum size in bytes that'd work for any jump destination'''
-    ref_count = sum(isinstance(step, DestRef) for step in asm)
+    ref_count = sum(isinstance(step, (MarkRef, MarkDeltaRef)) for step in asm)
     pure_len = sum(
         1 + len(step.extra_data)
         for step in asm
@@ -289,23 +358,37 @@ def get_min_dest_bytes(asm: list[Asm]) -> int:
 def asm_to_bytecode(asm: list[Asm]) -> bytes:
     dest_bytes = get_min_dest_bytes(asm)
     assert dest_bytes <= 6
-    dests: dict[DestId, int] = {}
+    marks: dict[MarkId, int] = {}
     final_bytes: list[int] = []
-    refs: list[tuple[int, DestId]] = []
+    refs: list[tuple[int, MarkId]] = []
+    delta_refs: list[tuple[int, MarkId, MarkId]] = []
     for step in asm:
         if isinstance(step, Op):
             final_bytes.extend(step.get_bytes())
-        elif isinstance(step, Dest):
-            assert step.dest not in dests, f'Duplicate destination {step.dest}'
-            dests[step.dest] = len(final_bytes)
-        elif isinstance(step, DestRef):
+        elif isinstance(step, Mark):
+            assert step.mid not in marks, f'Duplicate destination {step.mid}'
+            marks[step.mid] = len(final_bytes)
+        elif isinstance(step, MarkRef):
             refs.append((len(final_bytes) + 1, step.ref))
             final_bytes.extend(create_push(b'', dest_bytes).get_bytes())
+        elif isinstance(step, MarkDeltaRef):
+            delta_refs.append((len(final_bytes) + 1, step.start, step.end))
+            final_bytes.extend(create_push(b'', dest_bytes).get_bytes())
+        elif isinstance(step, bytes):
+            final_bytes.extend(step)
         else:
             raise ValueError(f'Unrecognized assembly step {step}')
 
     for offset, dest_id in refs:
-        for i, b in enumerate(dests[dest_id].to_bytes(dest_bytes, 'big'), start=offset):
+        for i, b in enumerate(marks[dest_id].to_bytes(dest_bytes, 'big'), start=offset):
+            final_bytes[i] = b
+
+    for offset, start_id, end_id in delta_refs:
+        start_offset = marks[start_id]
+        end_offset = marks[end_id]
+        assert end_offset >= start_offset, 'Inverted offsets'
+        size = end_offset - start_offset
+        for i, b in enumerate(size.to_bytes(dest_bytes, 'big'), start=offset):
             final_bytes[i] = b
 
     return bytes(final_bytes)
@@ -315,7 +398,7 @@ def main() -> None:
     with open(sys.argv[1], 'r') as f:
         root = parse_huff(f.read())
 
-    # TODO: Make sure constants and macros are unique
+    # TODO: Make sure constants, macros and code tables are unique
     constants: dict[Identifier, Op] = {
         get_ident(const): bytes_to_push(parse_hex_literal(child_get('hex_literal', const)))
         for const in get_defs('const', root)
@@ -325,8 +408,30 @@ def main() -> None:
         for node in get_defs('macro', root)
     }
 
-    asm = gen_asm('MAIN', macros, constants, [], {}, tuple(), tuple())
+    # TODO: Warn when literal has odd digits
+    code_tables: dict[Identifier, CodeTable] = {
+        get_ident(node): CodeTable(parse_hex_literal(child_get('hex_literal', node)), i)
+        for i, node in enumerate(get_defs('code_table', root), start=1)
+    }
+
+    asm = gen_asm(
+        'MAIN',
+        GlobalScope(macros, constants, code_tables),
+        [],
+        {},
+        (0,),
+        tuple()
+    )
+
+    for table in code_tables.values():
+        asm.extend([
+            Mark(((table.top_level_id,), START_SUB_ID)),
+            table.data,
+            Mark(((table.top_level_id,), END_SUB_ID)),
+        ])
+
     code = asm_to_bytecode(asm)
+
     print(code.hex())
 
 
