@@ -5,14 +5,20 @@
 
 1. `git clone https://github.com/philogy/py-huff`
 2. `cd py-huff`
-3. `pip install types-parsimonious parsimonious`
+3. `pip install -e .`
 
-Ready to use (yes this is very barebones, maybe available as PyPi package soon™️)
+Ready to use either `py_huff` itself as a Python Huff compilation or the `huffy` CLI wrapper.
 
 ## Usage
 
+**Compile code adding minimal deploy code**
 ```
-python3 main.py <huff_file_path>
+huffy -b my_huff_contract.huff
+```
+
+**Compile code (no deploy)**
+```
+huffy -r my_huff_contract.huff
 ```
 
 ## Motivation
@@ -80,7 +86,7 @@ all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in
     - ✅ Nested macros (e.g. `A() -> B() -> C()`)
 - ✅ Runtime bytecode
 - ❌ Deploy bytecode
-    - ❌ Minimal deploy code
+    - ✅ Minimal deploy code
     - ❌ Custom constructors
 ### Added Features
 - ❌ Tables
