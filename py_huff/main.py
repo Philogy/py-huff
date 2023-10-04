@@ -1,7 +1,12 @@
 from opcodes import OP_MAP, Op, create_push
+from Crypto.Hash import keccak
 import sys
 from typing import NamedTuple, Any, Generator, Callable
 from parser import parse_huff, ExNode, disp_node
+
+
+def keccak256(d: bytes) -> bytes:
+    return keccak.new(d, digest_bits=256).digest()
 
 
 Identifier = str
