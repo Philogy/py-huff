@@ -65,6 +65,7 @@ HUFF_GRAMMAR = Grammar(
 
 
 def to_ex_node(node: Node, prune: frozenset[str] = frozenset()) -> ExNode:
+    '''Converts parsimonious node to as simpler, nested tuple "ExNode"'''
     name = node.expr_name
     final_children: Children = node.text
     if node.children:

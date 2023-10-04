@@ -1,3 +1,5 @@
+from typing import NamedTuple, Generator
+
 OP_MAP = {
     'stop': 0x00,
     'add': 0x01,
@@ -145,3 +147,21 @@ OP_MAP = {
     'invalid': 0xfe,
     'selfdestruct': 0xff,
 }
+
+
+class Op(NamedTuple('Op', [('op', int), ('extra_data', bytes)])):
+    def get_bytes(self) -> Generator[int, None, None]:
+        yield self.op
+        yield from self.extra_data
+
+
+def create_push(data: bytes, size: int | None = None) -> Op:
+    if size is None:
+        size = len(data)
+    else:
+        assert len(data) <= size, \
+            f'Expected data to be no more than {size} bytes long, got {len(data)}'
+        padding = b'\x00'*(size - len(data))
+        data = padding + data
+    assert size in range(1, 32 + 1), f'No push of size {size}'
+    return Op(0x5f + size, data)

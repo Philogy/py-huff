@@ -1,24 +1,17 @@
-from opcodes import OP_MAP
+from opcodes import OP_MAP, Op, create_push
 import sys
 from typing import NamedTuple, Any, Generator
-from parser import parse_huff, ExNode, disp_node
-
-
-class InvalidElement(Exception):
-    def __init__(self, error_msg, invalid_el: ExNode, *args: object) -> None:
-        super().__init__(error_msg, *args)
-        self.invalid_el = invalid_el
+from parser import parse_huff, ExNode
 
 
 Identifier = str
-Op = NamedTuple('Op', [('op', int), ('extra_data', bytes)])
 MacroParam = NamedTuple('MacroParam', [('ident', Identifier)])
 LabelRef = NamedTuple('LabelRef', [('ident', Identifier)])
 ConstRef = NamedTuple('ConstRef', [('ident', Identifier)])
 LabelDef = NamedTuple('LabelDef', [('ident', Identifier)])
 Invocation = NamedTuple(
     'Invocation',
-    [('ident', Identifier), ('args', list[Op | LabelRef])]
+    [('ident', Identifier), ('args', list[Op | LabelRef | MacroParam])]
 )
 
 MacroElement = Invocation | Op | MacroParam | LabelRef | LabelDef | ConstRef
@@ -26,30 +19,8 @@ MacroElement = Invocation | Op | MacroParam | LabelRef | LabelDef | ConstRef
 Macro = NamedTuple('Macro', [
     ('ident', Identifier),
     ('params', list[Identifier]),
-    # ('takes', int),
-    # ('returns', int),
     ('body', list[MacroElement])
 ])
-
-
-def child_get(name: str | list[str], node: ExNode) -> ExNode:
-    if isinstance(name, list):
-        res = node
-        for sub_name in name:
-            res = child_get(sub_name, res)
-        return res
-
-    gotten = None
-    children = node.children
-    if not isinstance(children, list):
-        raise TypeError(f'Cannot get children on {node}')
-    for child in node.children:
-        assert isinstance(child, ExNode)
-        if child.name == name:
-            assert gotten is None, f'child_get: Found multiple "{name}" in {node}'
-            gotten = child
-    assert gotten is not None, f'child_get: "{name}" not found in {node}'
-    return gotten
 
 
 def child_get_all(name: str, node: ExNode) -> Generator[ExNode, None, None]:
@@ -65,11 +36,18 @@ def child_get_all(name: str, node: ExNode) -> Generator[ExNode, None, None]:
 
 def child_maybe_get(name: str, node: ExNode) -> ExNode | None:
     gotten = list(child_get_all(name, node))
-    assert len(gotten) <= 1, f'Got more than on "{name}" in {node}'
+    assert len(gotten) <= 1, \
+        f'{len(gotten)} instances of "{name}" found in {node}, expectd 1'
     if gotten:
         return gotten[0]
     else:
         return None
+
+
+def child_get(name: str, node: ExNode) -> ExNode:
+    gotten = child_maybe_get(name, node)
+    assert gotten is not None, f'"{name}" not found in {node}'
+    return gotten
 
 
 def identifier(s: Any) -> Identifier:
@@ -100,15 +78,10 @@ def literal_to_bytes(lit: str) -> bytes:
     return bytes.fromhex('0' * (len(lit) % 2) + lit)
 
 
-def bytes_to_push(data: bytes, src_el: ExNode) -> Op:
-    if len(data) > 32:
-        raise InvalidElement(
-            f'Cannot have hex literal larger than 32',
-            src_el
-        )
+def bytes_to_push(data: bytes) -> Op:
     if len(data) == 1 and data[0] == 0:
         return Op(OP_MAP['push0'], b'')
-    return Op(OP_MAP[f'push{len(data)}'], data)
+    return create_push(data)
 
 
 def parse_hex_literal(el: ExNode) -> bytes:
@@ -129,7 +102,7 @@ def parse_el(el: ExNode) -> MacroElement:
     el = get_idx(el, 0)
     name = el.name
     if name == 'hex_literal':
-        return bytes_to_push(parse_hex_literal(el), el)
+        return bytes_to_push(parse_hex_literal(el))
     elif name == 'macro_arg':
         return MacroParam(get_ident(el))
     elif name == 'invocation':
@@ -154,11 +127,8 @@ def parse_el(el: ExNode) -> MacroElement:
         num_node = child_get('num', el)
         assert isinstance(num_node.children, str)
         num = int(num_node.children)
-        assert num in range(0, 33), f'No PUSH{num}'
         data = parse_hex_literal(child_get('hex_literal', el))
-        assert len(data) <= num, \
-            f'Literal 0x{data.hex()} too long for push{num}'
-        return Op(OP_MAP[f'push{num}'], b'\x00'*(num - len(data)) + data)
+        return create_push(data, num)
 
     raise ValueError(f'Unrecognized el name "{name}"')
 
@@ -176,22 +146,18 @@ def parse_macro(node: ExNode) -> Macro:
     assert macro_type == 'macro', f'Macro type {macro_type} not yet supported'
     ident = get_ident(node)
 
-    params = child_get('params', node)
-    if (param_list := child_maybe_get('param_list', params)) is not None:
-        arg_idents = list(get_deep('identifier', param_list))
+    if (param_list := child_maybe_get('param_list', child_get('params', node))) is not None:
         args = [
             identifier(ident_node.children)
-            for ident_node in arg_idents
+            for ident_node in get_deep('identifier', param_list)
         ]
     else:
         args = []
 
     if (macro_body := child_maybe_get('macro_body', node)) is not None:
         els = [
-            *map(
-                parse_macro_el,
-                child_get_all('macro_body_el', macro_body)
-            )
+            parse_macro_el(raw_el)
+            for raw_el in child_get_all('macro_body_el', macro_body)
         ]
     else:
         els = []
@@ -246,9 +212,10 @@ def gen_asm(
 
     asm: list[Asm] = []
 
-    for i, el in enumerate(el for el in macro.body if isinstance(el, LabelDef)):
-        label = el.ident
+    for i, label_def in enumerate(el for el in macro.body if isinstance(el, LabelDef)):
+        label = label_def.ident
         dest_id = ctx_id, i
+        # TODO: Add warning when invoked macro has label shadowing parent
         assert label not in labels or labels[label] != dest_id, \
             f'Duplicate label "{label}" in macro "{macro.ident}"'
         labels[label] = dest_id
@@ -263,7 +230,6 @@ def gen_asm(
 
     idx = 0
     for el in macro.body:
-
         if isinstance(el, Op):
             asm.append(el)
         elif isinstance(el, LabelDef):
@@ -276,7 +242,7 @@ def gen_asm(
             assert el.ident in constants, f'Constant "{el.ident}" not found'
             asm.append(constants[el.ident])
         elif isinstance(el, Invocation):
-            invoke_args = []
+            invoke_args: list[MacroArg] = []
             for arg in el.args:
                 if isinstance(arg, LabelRef):
                     invoke_args.append(lookup_label(arg.ident))
@@ -306,7 +272,8 @@ def gen_asm(
     return asm
 
 
-def compile_asm(asm: list[Asm]) -> bytes:
+def get_min_dest_bytes(asm: list[Asm]) -> int:
+    '''Compute the minimum size in bytes that'd work for any jump destination'''
     ref_count = sum(isinstance(step, DestRef) for step in asm)
     pure_len = sum(
         1 + len(step.extra_data)
@@ -316,34 +283,41 @@ def compile_asm(asm: list[Asm]) -> bytes:
     dest_bytes = 1
     while ((1 << (8 * dest_bytes)) - 1) < pure_len + (1 + dest_bytes) * ref_count:
         dest_bytes += 1
+    return dest_bytes
+
+
+def asm_to_bytecode(asm: list[Asm]) -> bytes:
+    dest_bytes = get_min_dest_bytes(asm)
     assert dest_bytes <= 6
     dests: dict[DestId, int] = {}
     final_bytes: list[int] = []
     refs: list[tuple[int, DestId]] = []
     for step in asm:
         if isinstance(step, Op):
-            final_bytes.append(step.op)
-            final_bytes.extend(step.extra_data)
-        elif isinstance(step, DestRef):
-            final_bytes.append(OP_MAP[f'push{dest_bytes}'])
-            refs.append((len(final_bytes), step.ref))
-            final_bytes.extend([0] * dest_bytes)
+            final_bytes.extend(step.get_bytes())
         elif isinstance(step, Dest):
+            assert step.dest not in dests, f'Duplicate destination {step.dest}'
             dests[step.dest] = len(final_bytes)
+        elif isinstance(step, DestRef):
+            refs.append((len(final_bytes) + 1, step.ref))
+            final_bytes.extend(create_push(b'', dest_bytes).get_bytes())
+        else:
+            raise ValueError(f'Unrecognized assembly step {step}')
 
-    for offset, did in refs:
-        for i, b in enumerate(dests[did].to_bytes(dest_bytes, 'big'), start=offset):
+    for offset, dest_id in refs:
+        for i, b in enumerate(dests[dest_id].to_bytes(dest_bytes, 'big'), start=offset):
             final_bytes[i] = b
 
     return bytes(final_bytes)
 
 
-def main():
+def main() -> None:
     with open(sys.argv[1], 'r') as f:
         root = parse_huff(f.read())
 
+    # TODO: Make sure constants and macros are unique
     constants: dict[Identifier, Op] = {
-        get_ident(const): bytes_to_push(parse_hex_literal(child_get('hex_literal', const)), const)
+        get_ident(const): bytes_to_push(parse_hex_literal(child_get('hex_literal', const)))
         for const in get_defs('const', root)
     }
     macros: dict[Identifier, Macro] = {
@@ -352,7 +326,7 @@ def main():
     }
 
     asm = gen_asm('MAIN', macros, constants, [], {}, tuple(), tuple())
-    code = compile_asm(asm)
+    code = asm_to_bytecode(asm)
     print(code.hex())
 
 
