@@ -42,13 +42,13 @@ all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in
 - a reference to a label will select the deepest one e.g.
     ```
     #define macro A() = takes(0) returns(0) {
-        label:         <-------------\ <----------\
-        B()                          |            |
-        label jump     references ---/            |
-    }                                             |
-                                                  |
-    #define macro B() = takes(0) returns(0) {     |
-        label:                                    |
+        label:         <-------------\
+        B()                          |
+        label jump     references ---/
+    }
+
+    #define macro B() = takes(0) returns(0) {
+        label:         <--------------------------\
         C()                                       |
     }                                             |
                                                   |
