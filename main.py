@@ -200,7 +200,8 @@ GlobalScope = NamedTuple(
     [
         ('macros', dict[Identifier, Macro]),
         ('constants', dict[Identifier, Op]),
-        ('code_tables', dict[Identifier, CodeTable])
+        ('code_tables', dict[Identifier, CodeTable]),
+        ('functions', dict[Identifier, ExNode])
     ]
 )
 
@@ -238,6 +239,14 @@ def table_size(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     end_mid: MarkId = (table.top_level_id,), END_SUB_ID
 
     return [MarkDeltaRef(start_mid, end_mid)]
+
+
+def function_sig(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+    assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
+    arg, = args
+    assert isinstance(arg, GeneralRef), \
+        f'{name} does not support argument {arg}'
+    assert arg.ident in g.functions, f'Undefined function "{arg.ident}"'
 
 
 BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg]], list[Asm]]] = {
@@ -414,9 +423,14 @@ def main() -> None:
         for i, node in enumerate(get_defs('code_table', root), start=1)
     }
 
+    functions: dict[Identifier, ExNode] = {
+        get_ident(fn): fn
+        for fn in get_defs('function', root)
+    }
+
     asm = gen_asm(
         'MAIN',
-        GlobalScope(macros, constants, code_tables),
+        GlobalScope(macros, constants, code_tables, functions),
         [],
         {},
         (0,),

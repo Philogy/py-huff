@@ -16,7 +16,7 @@ ExNode = NamedTuple(
 HUFF_GRAMMAR = Grammar(
     fr'''
     program = gap (definition gap)*
-    definition = macro / include / const / code_table / function_def / event_def / error_def / jump_table
+    definition = macro / include / const / code_table / function / event / error / jump_table
 
     comment = line_comment / multi_line_comment
     line_comment = "//" ~"[^\n]*"
@@ -28,12 +28,12 @@ HUFF_GRAMMAR = Grammar(
 
     code_table = "#define" ws "table" ws identifier ws "{{" gap hex_literal gap "}}"
 
-    function_def = "#define" ws "function" ws identifier ws tuple ws ("view" / "nonpayable" / "payable") ws "returns" ws tuple
+    function = "#define" ws "function" ws identifier ws tuple ws ("view" / "nonpayable" / "payable") ws "returns" ws tuple
 
-    event_def = "#define" ws "event" ws identifier ws "(" ws (event_arg ws "," ws )* event_arg? ws ")"
+    event = "#define" ws "event" ws identifier ws "(" ws (event_arg ws "," ws )* event_arg? ws ")"
     event_arg = type ws "indexed"?
 
-    error_def = "#define" ws "error" ws identifier ws tuple
+    error = "#define" ws "error" ws identifier ws tuple
 
     jump_table = "#define" ws "jumptable" "__packed"? ws identifier ws "{{" gap (identifier gap)+ "}}"
 
