@@ -13,7 +13,7 @@ setup(
     long_description_content_type='text/markdown',
     long_description=long_description,
     py_modules=['py_huff'],
-    packages=find_packages(include='py_huff'),
+    packages=find_packages(include='py_huff*'),
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.10'
