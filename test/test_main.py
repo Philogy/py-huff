@@ -49,3 +49,11 @@ def test_const_ref():
         expected_deploy='60048060095f395ff360826082',
         expected_runtime='60826082'
     )
+
+
+def test_deep_args():
+    compile_test(
+        fp='../examples/deep_arg.huff',
+        expected_deploy='60068060095f395ff36005565b5b5b',
+        expected_runtime='6005565b5b5b'
+    )

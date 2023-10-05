@@ -1,0 +1,14 @@
+#define macro B(label) = takes(0) returns(0) {
+    <label> jump
+    end:
+}
+
+#define macro A(label) = takes(0) returns(0) {
+    B(<label>)
+    end:
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    A(end)
+    end:
+}
