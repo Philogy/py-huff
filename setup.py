@@ -12,6 +12,7 @@ setup(
     description='A compiler for the Huff EVM assembly language written in Python',
     long_description_content_type='text/markdown',
     long_description=long_description,
+    py_modules=['py_huff'],
     packages=[],
     classifiers=[
         'Programming Language :: Python :: 3',
