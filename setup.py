@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 
 with open('README.md', 'r', encoding='utf-8') as f:
@@ -13,7 +13,7 @@ setup(
     long_description_content_type='text/markdown',
     long_description=long_description,
     py_modules=['py_huff'],
-    packages=[],
+    packages=find_packages(include='py_huff*'),
     classifiers=[
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.10'
