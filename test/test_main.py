@@ -73,3 +73,11 @@ def test_includes():
         expected_deploy='60078060095f395ff301010362123456',
         expected_runtime='01010362123456'
     )
+
+
+def test_functions():
+    compile_test(
+        fp='../examples/functions.huff',
+        expected_deploy='60188060095f395ff3630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3',
+        expected_runtime='630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3'
+    )

@@ -163,6 +163,8 @@ def create_plain_op(op_name: str) -> Op:
 
 def create_push(data: bytes, size: int | None = None) -> Op:
     if size is None:
+        while len(data) > 1 and data[0] == 0:
+            data = data[1:]
         size = len(data)
     else:
         assert len(data) <= size, \

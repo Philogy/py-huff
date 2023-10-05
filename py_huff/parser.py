@@ -36,6 +36,42 @@ def identifier(s: Content) -> Identifier:
     return s
 
 
+def function_to_sig(fn: ExNode) -> str:
+    assert fn.name == 'function'
+    args, _ = fn.get_all('tuple')
+    return f'{get_ident(fn)}{tuple_to_compact_sig(args)}'
+
+
+def parse_type_to_sig(t: ExNode) -> str:
+    if isinstance(t.content, str):
+        return 'uint256' if t.content == 'uint' else t.content
+    if t.name == 'tuple':
+        return tuple_to_compact_sig(t)
+    assert len(t.content) == 2, f'{t} not len 2'
+    prim, snd = t.content
+    if snd.name == 'num':
+        base_type = prim.text()
+        if base_type == 'uint':
+            assert snd.text() in [*map(str, range(8, 256+1, 8))]
+        elif base_type == 'bytes':
+            assert snd.text() in [*map(str, range(1, 32+1))]
+        else:
+            raise ValueError(f'Unrecognized type with num {t.name}')
+        return prim.text() + snd.text()
+    else:
+        children = snd.children()
+        assert children[0].text() == '[' and children[-1].text() == ']' and len(children) in (2, 3), \
+            'Dual node not bracket'
+        if len(children) == 3:
+            assert children[1].text() != '0', f'Array quantifier cannot be 0'
+        return f'{parse_type_to_sig(prim)}{"".join(c.text() for c in children)}'
+
+
+def tuple_to_compact_sig(node: ExNode) -> str:
+    types = node.get_all_deep('type')
+    return f'({",".join(map(parse_type_to_sig, types))})'
+
+
 def get_ident(node: ExNode) -> Identifier:
     return identifier(node.get('identifier').text())
 

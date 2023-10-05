@@ -95,7 +95,7 @@ optimization step that will shorten earlier labels if they can fit into smaller 
     - ❌ Jump Tables (❌ normal, ❌ packed)
 - ❌ Built-ins
     - ❌ `__EVENT_HASH`
-    - ❌ `__FUNC_SIG`
+    - ✅ `__FUNC_SIG`
     - ❌ `__codesize`
     - ✅ `__tablestart`
     - ✅ `__tablesize`

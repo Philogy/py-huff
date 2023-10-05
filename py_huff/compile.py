@@ -4,7 +4,7 @@ from .opcodes import Op
 from .node import ExNode
 from .parser import (
     Identifier, CodeTable, Macro, get_ident, parse_hex_literal,
-    bytes_to_push, parse_macro
+    bytes_to_push, parse_macro, function_to_sig
 )
 from .resolver import resolve
 from .codegen import GlobalScope, expand_macro_to_asm, START_SUB_ID, END_SUB_ID
@@ -46,6 +46,8 @@ def compile(entry_fp: str) -> CompileResult:
         get_ident(fn): fn
         for fn in defs['function']
     }
+
+    assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'
 
     asm = expand_macro_to_asm(
         'MAIN',

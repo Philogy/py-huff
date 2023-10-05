@@ -1,0 +1,14 @@
+#define function a() nonpayable returns ()
+#define function b(uint) view returns (uint)
+#define function c(uint,string[] hello,bytes4[],bytes3,bytes3[]) payable returns (uint)
+#define function d((uint y,uint x)[3],uint16[]) view returns (uint)
+#define function wow58(uint256) view returns ()
+
+
+#define macro MAIN() = takes(0) returns(0) {
+    __FUNC_SIG(a)
+    __FUNC_SIG(b)
+    __FUNC_SIG(c)
+    __FUNC_SIG(d)
+    __FUNC_SIG(wow58)
+}

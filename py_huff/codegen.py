@@ -1,8 +1,13 @@
 from typing import NamedTuple, Callable
+from Crypto.Hash import keccak
 from .lexer import ExNode
 from .assembler import *
 from .parser import *
 from .opcodes import OP_MAP, Op
+
+
+def keccak256(preimage: bytes) -> bytes:
+    return keccak.new(data=preimage, digest_bits=256).digest()
 
 
 MacroArg = Op | MarkRef
@@ -55,12 +60,15 @@ def function_sig(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     assert isinstance(arg, GeneralRef), \
         f'{name} does not support argument {arg}'
     assert arg.ident in g.functions, f'Undefined function "{arg.ident}"'
-    return []
+    sig = function_to_sig(g.functions[arg.ident])
+    return [
+        create_push(keccak256(sig.encode())[:4])
+    ]
 
 
 BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg]], list[Asm]]] = {
     '__EVENT_HASH': not_implemented,
-    '__FUNC_SIG': not_implemented,
+    '__FUNC_SIG': function_sig,
     '__codesize': not_implemented,
     '__tablestart': table_start,
     '__tablesize': table_size
