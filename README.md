@@ -3,6 +3,8 @@
 
 ## Installation
 
+Important: Python 3.10 or higher is required
+
 1. `git clone https://github.com/philogy/py-huff`
 2. `cd py-huff`
 3. `pip install -e .`
