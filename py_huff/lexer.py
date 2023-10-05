@@ -1,17 +1,7 @@
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import Node
-from typing import NamedTuple, Any
+from .node import ExNode, Content
 
-Children = list['ExNode'] | str
-ExNode = NamedTuple(
-    'ExNode',
-    [
-        ('name', str),
-        ('children', Children),
-        ('start', int),
-        ('end', int)
-    ]
-)
 
 HUFF_GRAMMAR = Grammar(
     fr'''
@@ -22,7 +12,7 @@ HUFF_GRAMMAR = Grammar(
     line_comment = "//" ~"[^\n]*"
     multi_line_comment = "/*" (("*" !"/") / ~"[^*]")* "*/"
 
-    include = "#include \"" (~"[a-zA-Z0-9_-]" / "/" / ".")* "\""
+    include = "#include \"" ~"([a-zA-Z0-9_-]|/|\.)+" "\""
 
     const = "#define" ws "constant" ws identifier ws "=" ws (hex_literal / "FREE_STORAGE_POINTER()")
 
@@ -67,21 +57,21 @@ HUFF_GRAMMAR = Grammar(
 def to_ex_node(node: Node, prune: frozenset[str] = frozenset()) -> ExNode:
     '''Converts parsimonious node to as simpler, nested tuple "ExNode"'''
     name = node.expr_name
-    final_children: Children = node.text
+    final_children: Content = node.text
     if node.children:
         children: list[ExNode] = []
         for child in node.children:
             if child.expr_name in prune:
                 continue
             ex_child = to_ex_node(child, prune)
-            if ex_child.children:
+            if ex_child.content:
                 children.append(ex_child)
         if len(children) == 1:
             if name == '':
                 return children[0]
 
             if children[0].name == '':
-                final_children = children[0].children
+                final_children = children[0].content
             else:
                 final_children = children
         else:
@@ -90,18 +80,6 @@ def to_ex_node(node: Node, prune: frozenset[str] = frozenset()) -> ExNode:
     return ExNode(name, final_children or '', node.start, node.end)
 
 
-def disp_node(node: ExNode, rem_depth=-1, depth=0):
-    children = node.children
-    if isinstance(children, list):
-        print(f'{"  " * depth}[{node.name}]')
-        if not rem_depth:
-            return
-        for child in children:
-            disp_node(child, rem_depth-1, depth+1)
-    else:
-        print(f'{"  " * depth}[{node.name}] {node.children!r}')
-
-
-def parse_huff(s: str) -> ExNode:
+def lex_huff(s: str) -> ExNode:
     node = HUFF_GRAMMAR.parse(s)
     return to_ex_node(node, prune=frozenset({'ws', 'gap', 'comment'}))

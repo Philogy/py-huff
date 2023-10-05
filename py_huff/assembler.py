@@ -82,6 +82,7 @@ def asm_to_bytecode(asm: list[Asm]) -> bytes:
 def minimal_deploy(runtime: bytes) -> bytes:
     start: MarkId = tuple(), START_SUB_ID
     end: MarkId = tuple(), END_SUB_ID
+    # TODO: Add pre-shanghai (no PUSH0) toggle
     return asm_to_bytecode([
         MarkDeltaRef(start, end),
         create_plain_op('dup1'),
