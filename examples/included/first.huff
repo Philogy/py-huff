@@ -1,0 +1,8 @@
+#include "./rel.huff"
+
+#define constant WOWED = 0x123456
+
+#define macro A() = takes(0) returns(0) {
+    add add
+    B()
+}

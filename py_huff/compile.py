@@ -1,11 +1,12 @@
 from typing import NamedTuple
+from collections import defaultdict
 from .opcodes import Op
-from .lexer import lex_huff
 from .node import ExNode
 from .parser import (
     Identifier, CodeTable, Macro, get_ident, parse_hex_literal,
-    get_defs, bytes_to_push, parse_macro
+    bytes_to_push, parse_macro
 )
+from .resolver import resolve
 from .codegen import GlobalScope, expand_macro_to_asm, START_SUB_ID, END_SUB_ID
 from .assembler import asm_to_bytecode, Mark, minimal_deploy
 
@@ -18,20 +19,19 @@ CompileResult = NamedTuple(
 )
 
 
-def compile(fp: str) -> CompileResult:
-    with open(fp, 'r') as f:
-        root = lex_huff(f.read())
-
-    # TODO: Recursively resolve and flatten includes
+def compile(entry_fp: str) -> CompileResult:
+    defs: dict[str, list[ExNode]] = defaultdict(list)
+    for d in resolve(entry_fp):
+        defs[d.name].append(d)
 
     # TODO: Make sure constants, macros and code tables are unique
     constants: dict[Identifier, Op] = {
         get_ident(const): bytes_to_push(parse_hex_literal(const.get('hex_literal')))
-        for const in get_defs(root, 'const')
+        for const in defs['const']
     }
     macros: dict[Identifier, Macro] = {
         (macro := parse_macro(node)).ident: macro
-        for node in get_defs(root, 'macro')
+        for node in defs['macro']
     }
 
     assert 'CONSTRUCTOR' not in macros, 'Custom constructors not yet supported'
@@ -39,12 +39,12 @@ def compile(fp: str) -> CompileResult:
     # TODO: Warn when literal has odd digits
     code_tables: dict[Identifier, CodeTable] = {
         get_ident(node): CodeTable(parse_hex_literal(node.get('hex_literal')), i)
-        for i, node in enumerate(get_defs(root, 'code_table'), start=1)
+        for i, node in enumerate(defs['code_table'], start=1)
     }
 
     functions: dict[Identifier, ExNode] = {
         get_ident(fn): fn
-        for fn in get_defs(root, 'function')
+        for fn in defs['function']
     }
 
     asm = expand_macro_to_asm(

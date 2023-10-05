@@ -1,0 +1,3 @@
+#define macro B() = takes(0) returns(0) {
+    sub
+}

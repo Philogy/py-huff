@@ -37,9 +37,8 @@ Besides the missing features as listed under _Features_ this implementation has 
 
 ### Jump destinations
 Unlike `huff-rs`, `py-huff` supports jump destinations larger or smaller than 2-bytes. The size of
-the push opcode will automatically be adjusted to a smaller size. Note that like `huff-rs`, `py-huff`
-keeps the size of all push jump dests the same, meaning if your contract is more than 255 bytes long
-all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in 1 byte.
+the push opcode will automatically be adjusted to a smaller size. Furthermore `py-huff` has an
+optimization step that will shorten earlier labels if they can fit into smaller push opcodes.
 
 ### Jump Labels
 `huff-rs` currently has some unclear jump label semantics (see [#295](https://github.com/huff-language/huff-rs/issues/295)), `py-huff` attempts to introduce clear jump label scoping and semantics:
@@ -100,6 +99,7 @@ all jump dest pushes will be `PUSH2`s, even if earlier destinations would fit in
     - ❌ `__codesize`
     - ✅ `__tablestart`
     - ✅ `__tablesize`
+- ✅ Importing files via `#includes`
 
 ### Niche/Advanced Features
 - ✅ Push literals (e.g. `push4 0x010`)
