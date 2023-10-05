@@ -1,0 +1,10 @@
+#define constant BOB = 0x82
+
+#define macro A() = takes(0) returns(1) {
+    [BOB]
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    A()
+    [BOB]
+}

@@ -1,0 +1,13 @@
+#define macro LOAD_UINT(cd_offset) = takes(0) returns(1) {
+    <cd_offset>
+    calldataload
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    LOAD_UINT(0x0)
+    LOAD_UINT(0x20)
+    add
+
+    msize mstore
+    msize 0x0 return
+}
