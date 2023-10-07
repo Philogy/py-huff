@@ -42,6 +42,16 @@ def function_to_sig(fn: ExNode) -> str:
     return f'{get_ident(fn)}{tuple_to_compact_sig(args)}'
 
 
+def event_to_sig(fn: ExNode) -> str:
+    name = get_ident(fn)
+    args = fn.get_all_deep('event_arg')
+    parsed_args = [
+        parse_type_to_sig(a.get("type"))
+        for a in args
+    ]
+    return f'{name}({",".join(parsed_args)})'
+
+
 def parse_type_to_sig(t: ExNode) -> str:
     if isinstance(t.content, str):
         return 'uint256' if t.content == 'uint' else t.content

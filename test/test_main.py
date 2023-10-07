@@ -81,3 +81,11 @@ def test_functions():
         expected_deploy='60188060095f395ff3630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3',
         expected_runtime='630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3'
     )
+
+
+def test_events():
+    compile_test(
+        fp='../examples/events.huff', expected_deploy='60638060095f395ff37fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef7f884edad9ce6fa2440d8a54cc123490eb96d2768479d49ff9c7366125a94243647f76fae7629f203ffe0facce0a6c4be1a3f7a1c29f37a5c3907738f3b5f9ab93bc',
+
+        expected_runtime='7fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef7f884edad9ce6fa2440d8a54cc123490eb96d2768479d49ff9c7366125a94243647f76fae7629f203ffe0facce0a6c4be1a3f7a1c29f37a5c3907738f3b5f9ab93bc'
+    )

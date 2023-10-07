@@ -21,7 +21,7 @@ HUFF_GRAMMAR = Grammar(
     function = "#define" ws "function" ws identifier ws tuple ws ("view" / "nonpayable" / "payable") ws "returns" ws tuple
 
     event = "#define" ws "event" ws identifier ws "(" ws (event_arg ws "," ws )* event_arg? ws ")"
-    event_arg = type ws "indexed"?
+    event_arg = type ws "indexed"? ws identifier?
 
     error = "#define" ws "error" ws identifier ws tuple
 

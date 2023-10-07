@@ -100,6 +100,7 @@ optimization step that will shorten earlier labels if they can fit into smaller 
     - ✅ `__tablestart`
     - ✅ `__tablesize`
 - ✅ Importing files via `#includes`
+- ❌ `FREE_STORAGE_POINTER()`
 
 ### Niche/Advanced Features
 - ✅ Push literals (e.g. `push4 0x010`)

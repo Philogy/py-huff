@@ -1,0 +1,9 @@
+#define event Transfer(address indexed from, address indexed, uint)
+#define event Withdraw(address indexed from, uint256 amount)
+#define event Bob(string indexed name, bytes1 neeet)
+
+#define macro MAIN() = takes(0) returns(0) {
+    __EVENT_HASH(Transfer)
+    __EVENT_HASH(Withdraw)
+    __EVENT_HASH(Bob)
+}

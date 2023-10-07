@@ -59,11 +59,11 @@ def needed_bytes(x: int) -> int:
 def get_min_static_size_bytes(asm: list[Asm]) -> int:
     '''Compute the minimum size in bytes that'd capture any code offset'''
     ref_count = sum(isinstance(step, (MarkRef, MarkDeltaRef)) for step in asm)
-    min_static_len = sum(map(min_static_size, asm))
-    dest_bytes = 1
-    while ((1 << (8 * dest_bytes)) - 1) < min_static_len + dest_bytes * ref_count:
-        dest_bytes += 1
-    return dest_bytes
+    min_static_total_size = sum(map(min_static_size, asm))
+    ref_bytes = 1
+    while ((1 << (8 * ref_bytes)) - 1) < min_static_total_size + ref_bytes * ref_count:
+        ref_bytes += 1
+    return ref_bytes
 
 
 def asm_to_solid(asm: list[Asm]) -> list[SolidAsm]:
@@ -135,10 +135,9 @@ def shorten_asm_once(asm: list[SolidAsm]) -> tuple[bool, list[SolidAsm]]:
     return changed_any, shortened_steps
 
 
-def shorten_asm(asm: list[SolidAsm], max_iters: int = 100) -> list[SolidAsm]:
+def shorten_asm(asm: list[SolidAsm]) -> list[SolidAsm]:
     changed_any = True
-    while changed_any and max_iters:
-        max_iters -= 1
+    while changed_any:
         changed_any, asm = shorten_asm_once(asm)
     return asm
 
@@ -151,9 +150,8 @@ def solid_asm_to_bytecode(asm: list[SolidAsm]) -> bytes:
     for step in asm:
         if isinstance(step, Op):
             final_bytes += bytes(step.get_bytes())
-        elif isinstance(step, Mark):
-            # Mark generates no bytes
-            pass
+        elif isinstance(step, bytes):
+            final_bytes += step
         elif isinstance(step, SizedRef):
             ref = step.ref
             if isinstance(ref, MarkRef):
@@ -164,18 +162,19 @@ def solid_asm_to_bytecode(asm: list[SolidAsm]) -> bytes:
                 assert False
             push = create_push(value.to_bytes(step.offset_size, 'big'))
             final_bytes += bytes(push.get_bytes())
-        elif isinstance(step, bytes):
-            final_bytes += step
+        elif isinstance(step, Mark):
+            # Mark generates no bytes
+            pass
         else:
             raise ValueError(f'Unrecognized assembly step {step}')
 
     return final_bytes
 
 
-def asm_to_bytecode(asm: list[Asm], max_reduce_iters: int = -1) -> bytes:
+def asm_to_bytecode(asm: list[Asm]) -> bytes:
     validate_asm(asm)
     solid_asm = asm_to_solid(asm)
-    solid_asm = shorten_asm(solid_asm, max_reduce_iters)
+    solid_asm = shorten_asm(solid_asm)
     return solid_asm_to_bytecode(solid_asm)
 
 

@@ -17,7 +17,8 @@ GlobalScope = NamedTuple(
         ('macros', dict[Identifier, Macro]),
         ('constants', dict[Identifier, Op]),
         ('code_tables', dict[Identifier, CodeTable]),
-        ('functions', dict[Identifier, ExNode])
+        ('functions', dict[Identifier, ExNode]),
+        ('events', dict[Identifier, ExNode])
     ]
 )
 
@@ -66,8 +67,20 @@ def function_sig(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     ]
 
 
+def event_hash(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+    assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
+    arg, = args
+    assert isinstance(arg, GeneralRef), \
+        f'{name} does not support argument {arg}'
+    assert arg.ident in g.events, f'Undefined event "{arg.ident}"'
+    sig = event_to_sig(g.events[arg.ident])
+    return [
+        create_push(keccak256(sig.encode()))
+    ]
+
+
 BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg]], list[Asm]]] = {
-    '__EVENT_HASH': not_implemented,
+    '__EVENT_HASH': event_hash,
     '__FUNC_SIG': function_sig,
     '__codesize': not_implemented,
     '__tablestart': table_start,
