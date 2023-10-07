@@ -66,6 +66,8 @@ OP_MAP = {
     'msize': 0x59,
     'gas': 0x5a,
     'jumpdest': 0x5b,
+    'tload': 0x5c,
+    'tstore': 0x5d,
     'push0': 0x5f,
     'push1': 0x60,
     'push2': 0x61,
