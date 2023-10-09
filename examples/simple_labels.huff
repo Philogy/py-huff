@@ -2,7 +2,7 @@
     0x0 calldataload     // [x]
     0x1                  // [x, 1]
 
-    dup1                 // [x, 1, x]
+    dup2                 // [x, 1, x]
     atleast_one jumpi    // [x, 1]
         // return 0
         0x20 0x0 return  // [] -- end
