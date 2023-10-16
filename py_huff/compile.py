@@ -8,8 +8,9 @@ from .parser import (
     bytes_to_push, parse_macro, get_includes
 )
 from .resolver import resolve
-from .codegen import GlobalScope, expand_macro_to_asm, START_SUB_ID, END_SUB_ID
-from .assembler import asm_to_bytecode, Mark, minimal_deploy
+from .codegen import GlobalScope, expand_macro_to_asm, RUNTIME_ENTRY_MACRO
+from .assembler import asm_to_bytecode, Mark, minimal_deploy, START_SUB_ID, END_SUB_ID
+from .utils import build_unique_dict
 
 CompileResult = NamedTuple(
     'CompileResult',
@@ -40,38 +41,40 @@ def compile_src(src: str) -> CompileResult:
 
 def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
 
-    # TODO: Make sure constants, macros and code tables are unique
-    constants: dict[Identifier, Op] = {
-        get_ident(const): bytes_to_push(parse_hex_literal(const.get('hex_literal')))
+    constants: dict[Identifier, Op] = build_unique_dict(
+        (get_ident(const), bytes_to_push(parse_hex_literal(const.get('hex_literal'))))
         for const in defs['const']
-    }
-    macros: dict[Identifier, Macro] = {
-        (macro := parse_macro(node)).ident: macro
+    )
+    macros: dict[Identifier, Macro] = build_unique_dict(
+        ((macro := parse_macro(node)).ident, macro)
         for node in defs['macro']
-    }
+    )
 
     assert 'CONSTRUCTOR' not in macros, 'Custom constructors not yet supported'
 
     # TODO: Warn when literal has odd digits
-    code_tables: dict[Identifier, CodeTable] = {
-        get_ident(node): CodeTable(parse_hex_literal(node.get('hex_literal')), i)
-        for i, node in enumerate(defs['code_table'], start=1)
-    }
+    code_tables: dict[Identifier, CodeTable] = build_unique_dict(
+        (get_ident(node), CodeTable(parse_hex_literal(node.get('hex_literal'))))
+        for node in defs['code_table']
+    )
 
-    functions: dict[Identifier, ExNode] = {
-        get_ident(fn): fn
+    for ctable in code_tables:
+        assert ctable not in macros, f'Already defined macro with name "{ctable}"'
+
+    functions: dict[Identifier, ExNode] = build_unique_dict(
+        (get_ident(fn), fn)
         for fn in defs['function']
-    }
+    )
 
-    events: dict[Identifier, ExNode] = {
-        get_ident(e): e
+    events: dict[Identifier, ExNode] = build_unique_dict(
+        (get_ident(e), e)
         for e in defs['event']
-    }
+    )
 
-    assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'
+    assert RUNTIME_ENTRY_MACRO in macros, 'Program must contain MAIN macro entry point'
 
     asm = expand_macro_to_asm(
-        'MAIN',
+        RUNTIME_ENTRY_MACRO,
         GlobalScope(macros, constants, code_tables, functions, events),
         [],
         {},

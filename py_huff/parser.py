@@ -21,13 +21,7 @@ Macro = NamedTuple('Macro', [
     ('body', list[MacroElement])
 ])
 
-CodeTable = NamedTuple(
-    'CodeTable',
-    [
-        ('data', bytes),
-        ('top_level_id', int)
-    ]
-)
+CodeTable = NamedTuple('CodeTable', [('data', bytes)])
 
 
 def identifier(s: Content) -> Identifier:

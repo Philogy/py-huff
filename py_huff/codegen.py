@@ -1,13 +1,14 @@
 from typing import NamedTuple, Callable
-from Crypto.Hash import keccak
+from enum import Enum
 from .lexer import ExNode
 from .assembler import *
 from .parser import *
 from .opcodes import OP_MAP, Op
+from .utils import keccak256
 
 
-def keccak256(preimage: bytes) -> bytes:
-    return keccak.new(data=preimage, digest_bits=256).digest()
+RUNTIME_ENTRY_MACRO = 'MAIN'
+DEPLOY_ENTRY_MACRO = 'CONSTRUCTOR'
 
 
 MacroArg = Op | MarkRef
@@ -22,13 +23,21 @@ GlobalScope = NamedTuple(
     ]
 )
 
+Preparation = NamedTuple(
+    'Preparation',
+    [
+        ('contents', list[Asm]),
+        ('dep_refs', tuple[tuple[MarkId, Identifier], ...]),
+        ('deps', dict[Identifier, CodeTable | list[Asm]])
+    ]
+)
+
 
 def not_implemented(fn_name, *_) -> list[Asm]:
-    return []
     raise ValueError(f'Built-in {fn_name} not implemented yet')
 
 
-def table_start(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+def table_start(name, g: GlobalScope, args: list[InvokeArg], _) -> list[Asm]:
     assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
     arg, = args
     assert isinstance(arg, GeneralRef), \
@@ -36,12 +45,12 @@ def table_start(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     assert arg.ident in g.code_tables, f'Undefined table "{arg.ident}"'
     # TODO: Support more tables
     table = g.code_tables[arg.ident]
-    mid: MarkId = (table.top_level_id,), START_SUB_ID
+    mid = (table.top_level_id,), START_SUB_ID
 
     return [MarkRef(mid)]
 
 
-def table_size(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+def table_size(name, g: GlobalScope, args: list[InvokeArg], _) -> list[Asm]:
     assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
     arg, = args
     assert isinstance(arg, GeneralRef), \
@@ -55,7 +64,7 @@ def table_size(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     return [MarkDeltaRef(start_mid, end_mid)]
 
 
-def function_sig(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+def function_sig(name, g: GlobalScope, args: list[InvokeArg], _) -> list[Asm]:
     assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
     arg, = args
     assert isinstance(arg, GeneralRef), \
@@ -67,7 +76,7 @@ def function_sig(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     ]
 
 
-def event_hash(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
+def event_hash(name, g: GlobalScope, args: list[InvokeArg], _) -> list[Asm]:
     assert len(args) == 1, f'{name} expects 1 argument, received {len(args)}'
     arg, = args
     assert isinstance(arg, GeneralRef), \
@@ -79,17 +88,51 @@ def event_hash(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     ]
 
 
-BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg]], list[Asm]]] = {
+def runtime_size(name: str, _: GlobalScope, args: list[InvokeArg], entry_macro: Identifier) -> list[Asm]:
+    assert len(args) == 0, f'{name} takes no arguments'
+    assert entry_macro == DEPLOY_ENTRY_MACRO, f'{name} only useable from within {DEPLOY_ENTRY_MACRO}'
+    return [
+        MarkDeltaRef()
+    ]
+
+
+BUILT_INS: dict[str, Callable[[str, GlobalScope, list[InvokeArg], Identifier], list[Asm]]] = {
     '__EVENT_HASH': event_hash,
     '__FUNC_SIG': function_sig,
-    '__codesize': not_implemented,
     '__tablestart': table_start,
-    '__tablesize': table_size
+    '__tablesize': table_size,
+    '__codesize': None,
+    '__codestart': None
 }
 
 
-def invoke_built_in(fn_name: str, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
-    return BUILT_INS[fn_name](fn_name, g, args)
+def invoke_built_in(fn_name: str, g: GlobalScope, args: list[InvokeArg], entry_macro: Identifier) -> list[Asm]:
+    return BUILT_INS[fn_name](fn_name, g, args, entry_macro)
+
+
+'''
+What a prepared macro needs to return
+1. The runtime assembly of the macro
+2. ID => object name map of dependencies
+3. object name => object map
+
+'''
+
+Trace = tuple[Identifier, ...]
+
+
+def add_step(trace: Trace, step: Identifier) -> Trace:
+    assert step not in trace, f'Recursive references not supported'
+    return trace + (step,)
+
+
+def prepare_macro(
+    g: GlobalScope,
+    macro_ident: Identifier,
+    trace: Trace
+) -> Preparation:
+    trace = add_step(trace, macro_ident)
+    return [], frozenset()
 
 
 def expand_macro_to_asm(
@@ -148,7 +191,7 @@ def expand_macro_to_asm(
         elif isinstance(el, Invocation):
             if el.ident in BUILT_INS:
                 asm.extend(
-                    invoke_built_in(el.ident, g, el.args)
+                    invoke_built_in(el.ident, g, el.args, visited_macros[0])
                 )
             else:
                 invoke_args: list[MacroArg] = []
@@ -162,6 +205,9 @@ def expand_macro_to_asm(
                     else:
                         raise TypeError(
                             f'Unrecognized macro invocation argument {arg}')
+
+                assert el.ident not in (RUNTIME_ENTRY_MACRO, DEPLOY_ENTRY_MACRO), \
+                    f'Macro {el.ident} only invocable at top-level'
 
                 asm.extend(
                     expand_macro_to_asm(
