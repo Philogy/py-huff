@@ -28,7 +28,7 @@ Preparation = NamedTuple(
     [
         ('contents', list[Asm]),
         ('dep_refs', tuple[tuple[MarkId, Identifier], ...]),
-        ('deps', dict[Identifier, CodeTable | list[Asm]])
+        ('deps', dict[Identifier, list[Asm]])
     ]
 )
 
@@ -126,13 +126,102 @@ def add_step(trace: Trace, step: Identifier) -> Trace:
     return trace + (step,)
 
 
+def only_label_defs(macro_els: list[MacroElement]) -> Generator[LabelDef, None, None]:
+    for el in macro_els:
+        if isinstance(el, LabelDef):
+            yield el
+
+
 def prepare_macro(
     g: GlobalScope,
     macro_ident: Identifier,
+    args: list[MacroArg],
+    labels: dict[Identifier, MarkId],
+    ctx_id: ContextId,
     trace: Trace
 ) -> Preparation:
+    assert macro_ident not in trace, f'Circular macro refrence in {macro_ident}'
+    assert macro_ident in g.macros, f'Unrecognized macro "{macro_ident}"'
+    macro = g.macros[macro_ident]
+    assert len(args) == len(macro.params), \
+        f'macro "{macro_ident}" received {len(args)} args, expected {len(macro.params)}'
     trace = add_step(trace, macro_ident)
-    return [], frozenset()
+    ident_to_arg = {
+        ident: arg
+        for ident, arg in zip(macro.params, args)
+    }
+
+    body_asm: list[Asm] = []
+
+    for i, label_def in enumerate(only_label_defs(macro.body)):
+        label = label_def.ident
+        if label in labels:
+            assert len(labels[label].ctx_id) < len(ctx_id),\
+                f'Unexpected label origin {labels[label]}'
+            assert labels[label].ctx_id != ctx_id, f'Duplicate label {label} in macro {macro_ident}'
+        labels[label] = MarkId(ctx_id, i, None)
+
+    def lookup_label(ident: Identifier) -> MarkRef:
+        assert ident in labels, f'Label "{ident}" not found in scope ({ctx_id})'
+        return MarkRef(labels[ident])
+
+    def lookup_arg(ident: Identifier) -> MacroArg:
+        assert ident in ident_to_arg, f'Invalid macro argument "{ident}"'
+        return ident_to_arg[ident]
+
+    idx = 0
+    for el in macro.body:
+        if isinstance(el, Op):
+            body_asm.append(el)
+        elif isinstance(el, LabelDef):
+            body_asm.extend([
+                Mark(labels[el.ident]),
+                Op(OP_MAP['jumpdest'], b'')
+            ])
+        elif isinstance(el, GeneralRef):
+            body_asm.append(lookup_label(el.ident))
+        elif isinstance(el, MacroParam):
+            body_asm.append(lookup_arg(el.ident))
+        elif isinstance(el, ConstRef):
+            assert el.ident in g.constants, f'Constant "{el.ident}" not found'
+            body_asm.append(g.constants[el.ident])
+        elif isinstance(el, Invocation):
+            if el.ident in BUILT_INS:
+                asm.extend(
+                    invoke_built_in(el.ident, g, el.args, visited_macros[0])
+                )
+            else:
+                invoke_args: list[MacroArg] = []
+                for arg in el.args:
+                    if isinstance(arg, GeneralRef):
+                        invoke_args.append(lookup_label(arg.ident))
+                    elif isinstance(arg, MacroParam):
+                        invoke_args.append(lookup_arg(arg.ident))
+                    elif isinstance(arg, Op):
+                        invoke_args.append(arg)
+                    else:
+                        raise TypeError(
+                            f'Unrecognized macro invocation argument {arg}'
+                        )
+
+                assert el.ident not in (RUNTIME_ENTRY_MACRO, DEPLOY_ENTRY_MACRO), \
+                    f'Macro {el.ident} only invocable at top-level'
+
+                asm.extend(
+                    expand_macro_to_asm(
+                        el.ident,
+                        g,
+                        invoke_args,
+                        labels.copy(),
+                        ctx_id + (idx, ),
+                        visited_macros
+                    )
+                )
+                idx += 1
+        else:
+            raise TypeError(f'Unrecognized macro element {el}')
+
+    return asm
 
 
 def expand_macro_to_asm(
@@ -154,8 +243,6 @@ def expand_macro_to_asm(
         ident: arg
         for ident, arg in zip(macro.params, args)
     }
-    if args is None:
-        args = []
 
     asm: list[Asm] = []
 
@@ -174,53 +261,3 @@ def expand_macro_to_asm(
     def lookup_arg(ident: Identifier) -> MacroArg:
         assert ident in ident_to_arg, f'Invalid macro argument "{ident}"'
         return ident_to_arg[ident]
-
-    idx = 0
-    for el in macro.body:
-        if isinstance(el, Op):
-            asm.append(el)
-        elif isinstance(el, LabelDef):
-            asm.extend([Mark(labels[el.ident]), Op(OP_MAP['jumpdest'], b'')])
-        elif isinstance(el, GeneralRef):
-            asm.append(lookup_label(el.ident))
-        elif isinstance(el, MacroParam):
-            asm.append(lookup_arg(el.ident))
-        elif isinstance(el, ConstRef):
-            assert el.ident in g.constants, f'Constant "{el.ident}" not found'
-            asm.append(g.constants[el.ident])
-        elif isinstance(el, Invocation):
-            if el.ident in BUILT_INS:
-                asm.extend(
-                    invoke_built_in(el.ident, g, el.args, visited_macros[0])
-                )
-            else:
-                invoke_args: list[MacroArg] = []
-                for arg in el.args:
-                    if isinstance(arg, GeneralRef):
-                        invoke_args.append(lookup_label(arg.ident))
-                    elif isinstance(arg, MacroParam):
-                        invoke_args.append(lookup_arg(arg.ident))
-                    elif isinstance(arg, Op):
-                        invoke_args.append(arg)
-                    else:
-                        raise TypeError(
-                            f'Unrecognized macro invocation argument {arg}')
-
-                assert el.ident not in (RUNTIME_ENTRY_MACRO, DEPLOY_ENTRY_MACRO), \
-                    f'Macro {el.ident} only invocable at top-level'
-
-                asm.extend(
-                    expand_macro_to_asm(
-                        el.ident,
-                        g,
-                        invoke_args,
-                        labels.copy(),
-                        ctx_id + (idx, ),
-                        visited_macros
-                    )
-                )
-                idx += 1
-        else:
-            raise TypeError(f'Unrecognized macro element {el}')
-
-    return asm

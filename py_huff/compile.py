@@ -9,7 +9,7 @@ from .parser import (
 )
 from .resolver import resolve
 from .codegen import GlobalScope, expand_macro_to_asm, RUNTIME_ENTRY_MACRO
-from .assembler import asm_to_bytecode, Mark, minimal_deploy, START_SUB_ID, END_SUB_ID
+from .assembler import asm_to_bytecode, Mark, minimal_deploy, MarkId, MarkPurpose
 from .utils import build_unique_dict
 
 CompileResult = NamedTuple(
@@ -84,7 +84,7 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
 
     for table in code_tables.values():
         asm.extend([
-            Mark(((table.top_level_id,), START_SUB_ID)),
+            Mark(MarkId((table.top_level_id,), 0, MarkPurpose.Start)),
             table.data,
             Mark(((table.top_level_id,), END_SUB_ID)),
         ])
