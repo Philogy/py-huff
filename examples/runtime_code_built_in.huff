@@ -1,8 +1,4 @@
 #define macro CONSTRUCTOR() = takes(0) returns(0) {
-    // owner = msg.sender
-    caller
-    0x0
-    sstore
     // return runtime
     __RUNTIME_SIZE()
     dup1
