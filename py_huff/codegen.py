@@ -36,7 +36,7 @@ def table_start(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     assert arg.ident in g.code_tables, f'Undefined table "{arg.ident}"'
     # TODO: Support more tables
     table = g.code_tables[arg.ident]
-    mid: MarkId = (table.top_level_id,), START_SUB_ID
+    mid = MarkId(tuple(), table.top_level_id, MarkPurpose.Start)
 
     return [MarkRef(mid)]
 
@@ -49,8 +49,8 @@ def table_size(name, g: GlobalScope, args: list[InvokeArg]) -> list[Asm]:
     assert arg.ident in g.code_tables, f'Undefined table "{arg.ident}"'
     # TODO: Support more tables
     table = g.code_tables[arg.ident]
-    start_mid: MarkId = (table.top_level_id,), START_SUB_ID
-    end_mid: MarkId = (table.top_level_id,), END_SUB_ID
+    start_mid = MarkId(tuple(), table.top_level_id, MarkPurpose.Start)
+    end_mid = MarkId(tuple(), table.top_level_id, MarkPurpose.End)
 
     return [MarkDeltaRef(start_mid, end_mid)]
 
@@ -118,7 +118,7 @@ def expand_macro_to_asm(
 
     for i, label_def in enumerate(el for el in macro.body if isinstance(el, LabelDef)):
         label = label_def.ident
-        dest_id: MarkId = ctx_id, i
+        dest_id: MarkId = MarkId(ctx_id, i, MarkPurpose.Label)
         # TODO: Add warning when invoked macro has label shadowing parent
         assert label not in labels or labels[label] != dest_id, \
             f'Duplicate label "{label}" in macro "{macro.ident}"'

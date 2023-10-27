@@ -1,11 +1,25 @@
 from typing import NamedTuple
-from functools import reduce
+from enum import Enum
 from .opcodes import Op, create_push, create_plain_op
-from .utils import build_unique_dict, set_unique
+from .utils import build_unique_dict
+
+
+class MarkPurpose(Enum):
+    Start = 'Start'
+    End = 'End'
+    Label = 'Label'
+    Other = 'Other'
 
 
 ContextId = tuple[int, ...]
-MarkId = tuple[ContextId, int]
+MarkId = NamedTuple(
+    'MarkId',
+    [
+        ('ctx_id', ContextId),
+        ('sub_id', int),
+        ('purpose', MarkPurpose)
+    ]
+)
 Mark = NamedTuple('Mark', [('mid', MarkId)])
 MarkRef = NamedTuple('MarkRef', [('mid', MarkId)])
 MarkDeltaRef = NamedTuple('MarkDeltaRef', [('start', MarkId), ('end', MarkId)])
@@ -17,9 +31,6 @@ SizedRef = NamedTuple(
 
 Asm = Op | Mark | MarkRef | MarkDeltaRef | bytes
 SolidAsm = Op | Mark | SizedRef | bytes
-
-START_SUB_ID = 0
-END_SUB_ID = 1
 
 
 def set_size(ref: SizedRef, size: int) -> SizedRef:
@@ -179,8 +190,8 @@ def asm_to_bytecode(asm: list[Asm]) -> bytes:
 
 
 def minimal_deploy(runtime: bytes) -> bytes:
-    start: MarkId = tuple(), START_SUB_ID
-    end: MarkId = tuple(), END_SUB_ID
+    start: MarkId = MarkId(tuple(), 0, MarkPurpose.Start)
+    end: MarkId = MarkId(tuple(), 0, MarkPurpose.End)
     # TODO: Add pre-shanghai (no PUSH0) toggle
     return asm_to_bytecode([
         MarkDeltaRef(start, end),

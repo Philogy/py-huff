@@ -8,8 +8,8 @@ from .parser import (
     bytes_to_push, parse_macro, get_includes
 )
 from .resolver import resolve
-from .codegen import GlobalScope, expand_macro_to_asm, START_SUB_ID, END_SUB_ID
-from .assembler import asm_to_bytecode, Mark, minimal_deploy
+from .codegen import GlobalScope, expand_macro_to_asm
+from .assembler import asm_to_bytecode, Mark, minimal_deploy, MarkPurpose, MarkId
 
 CompileResult = NamedTuple(
     'CompileResult',
@@ -18,6 +18,8 @@ CompileResult = NamedTuple(
         ('deploy', bytes)
     ]
 )
+
+TOP_LEVEL_ENTRY_CONTEXT = (0,)
 
 
 def idefs_to_defs(idefs: Iterable[ExNode]) -> dict[str, list[ExNode]]:
@@ -75,15 +77,15 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
         GlobalScope(macros, constants, code_tables, functions, events),
         [],
         {},
-        (0,),
+        TOP_LEVEL_ENTRY_CONTEXT,
         tuple()
     )
 
     for table in code_tables.values():
         asm.extend([
-            Mark(((table.top_level_id,), START_SUB_ID)),
+            Mark(MarkId(tuple(), table.top_level_id, MarkPurpose.Start)),
             table.data,
-            Mark(((table.top_level_id,), END_SUB_ID)),
+            Mark(MarkId(tuple(), table.top_level_id, MarkPurpose.End)),
         ])
 
     runtime = asm_to_bytecode(asm)
