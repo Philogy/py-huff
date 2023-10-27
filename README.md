@@ -74,7 +74,6 @@ return
 ### Missing Features
 - ❌ Jump Tables (❌ normal, ❌ packed, ✅ code (already present))
 - ❌ `__codesize`
-- ❌ `FREE_STORAGE_POINTER()`
 - ❌ Fns (non-inlined macros)
     - ❌ Recursion
 

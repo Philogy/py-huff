@@ -1,11 +1,11 @@
-from typing import NamedTuple, Callable, Optional, Any
+from typing import NamedTuple, Callable, Optional, Any, Iterable
 import inspect
 from .lexer import ExNode
 from .assembler import *
 from .parser import *
 from .opcodes import OP_MAP, Op
 from .context import ContextTracker
-from .utils import s, keccak256
+from .utils import s, keccak256, set_unique, byte_size
 
 
 MacroArg = Op | MarkRef
@@ -200,6 +200,20 @@ BUILT_INS: dict[str, Callable[[str, Scope, list[InvokeArg]], list[Asm]]] = {
 def invoke_built_in(fn_name: str, scope: Scope, args: list[InvokeArg]) -> list[Asm]:
     assert fn_name in BUILT_INS, f'Unrecognized built-in "{fn_name}"'
     return BUILT_INS[fn_name](fn_name, scope, args)
+
+
+def gen_constants(raw_constants: Iterable[tuple[Identifier, Optional[bytes]]]) -> dict[Identifier, Op]:
+    constants: dict[Identifier, Op] = {}
+    free_ptr: int = 0
+    for ident, value in raw_constants:
+        if value is None:
+            value = free_ptr.to_bytes(
+                byte_size(free_ptr),
+                'big'
+            )
+            free_ptr += 1
+        set_unique(constants, ident, bytes_to_push(value))
+    return constants
 
 
 def expand_macro_to_asm(

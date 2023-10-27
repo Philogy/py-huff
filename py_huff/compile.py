@@ -1,17 +1,17 @@
-from .context import ContextTracker
-from .utils import build_unique_dict
 from typing import NamedTuple, Iterable
 from collections import defaultdict
+from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
+from .context import ContextTracker
+from .utils import build_unique_dict
 from .opcodes import Op, op
 from .node import ExNode
 from .lexer import lex_huff
-from .parser import (
-    Identifier, Macro, get_ident, parse_hex_literal,
-    bytes_to_push, parse_macro, get_includes
-)
+from .parser import Identifier, Macro, get_ident, parse_hex_literal, parse_macro, get_includes, parse_constant
 from .resolver import resolve
-from .codegen import GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData, gen_minimal_init
-from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
+from .codegen import (
+    GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData,
+    gen_minimal_init, gen_constants
+)
 
 CompileResult = NamedTuple(
     'CompileResult',
@@ -43,10 +43,11 @@ def compile_src(src: str) -> CompileResult:
 def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
 
     # TODO: Make sure constants, macros and code tables are unique
-    constants: dict[Identifier, Op] = build_unique_dict(
-        (get_ident(const), bytes_to_push(parse_hex_literal(const.get('hex_literal'))))
+    constants: dict[Identifier, Op] = gen_constants(
+        (get_ident(const), parse_constant(const))
         for const in defs['const']
     )
+
     macros: dict[Identifier, Macro] = build_unique_dict(
         ((macro := parse_macro(node)).ident, macro)
         for node in defs['macro']

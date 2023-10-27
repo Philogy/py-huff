@@ -105,3 +105,11 @@ def test_runtime_code_built_in():
         expected_deploy='60018060095f395ff300',
         expected_runtime='00'
     )
+
+
+def test_free_storage_pointer():
+    compile_test(
+        fp='../examples/free_storage_pointer.huff',
+        expected_deploy='60058060095f395ff35f60016002',
+        expected_runtime='5f60016002'
+    )

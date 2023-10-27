@@ -1,4 +1,4 @@
-from typing import NamedTuple, Generator
+from typing import NamedTuple, Generator, Optional
 from .node import ExNode, Content
 from .opcodes import Op, OP_MAP, op, create_push
 
@@ -180,3 +180,13 @@ def get_includes(root: ExNode) -> tuple[list[str], list[ExNode]]:
             other_nodes.append(d)
 
     return includes, other_nodes
+
+
+def parse_constant(node: ExNode) -> Optional[bytes]:
+    assert node.name == 'const'
+    value_node = node.get_idx(4)
+    if value_node.name == 'hex_literal':
+        return parse_hex_literal(value_node)
+    assert value_node.text() == 'FREE_STORAGE_POINTER()',\
+        f'Constant node {node} neither hex literal or FREE_STORAGE_POINTER()'
+    return None

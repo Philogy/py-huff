@@ -1,0 +1,11 @@
+#define constant OWNER_SLOT = FREE_STORAGE_POINTER()
+#define constant BALANCES_SLOT = FREE_STORAGE_POINTER()
+#define constant WOW_SLOT = FREE_STORAGE_POINTER()
+
+#define constant STUFF = 0x1234
+
+#define macro MAIN() = takes(0) returns(0) {
+    [OWNER_SLOT]
+    [BALANCES_SLOT]
+    [WOW_SLOT]
+}

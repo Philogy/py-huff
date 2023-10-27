@@ -37,3 +37,7 @@ def s(x: int) -> str:
 
 def keccak256(preimage: bytes) -> bytes:
     return keccak.new(data=preimage, digest_bits=256).digest()
+
+
+def byte_size(x: int) -> int:
+    return max((x.bit_length() + 7) // 8, 1)
