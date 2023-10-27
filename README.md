@@ -1,4 +1,4 @@
-# `py-huff`
+# PyHuff
 
 `py-huff` is a compiler for Huff, an EVM assembly language written in Python.
 
@@ -119,3 +119,11 @@ optimization step that will shorten earlier labels if they can fit into smaller 
         E()            <throws>
     }
     ```
+
+### Default Constructor Code Return
+
+_PyHuff_ will only automatically add minimal initcode if you don't specify `CONSTRUCTOR` at all. This
+is unlike `huff-rs` which will also add the minimal initcode to your constructor if it does not
+reference return. PyHuff does not do this for the sake of simplicity and requiring you to be
+explicit. The minimal code return can easily be added to your constructor via the
+`__RETURN_RUNTIME()` built-in.
