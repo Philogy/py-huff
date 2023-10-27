@@ -1,6 +1,6 @@
 # PyHuff
 
-`py-huff` is a compiler for Huff, an EVM assembly language written in Python.
+PyHuff is a compiler for Huff, an EVM assembly language, written in Python.
 
 > [!WARNING]
 > This repo is experimental, for a more tested Huff compiler see [huff-rs](https://github.com/huff-language/huff-rs)
@@ -72,6 +72,7 @@ return
 ```
 
 ### Missing Features
+These are features that are planned for PyHuff but not yet implemented
 - ❌ Jump Tables (❌ normal, ❌ packed, ✅ code (already present))
 - ❌ `__codesize`
 - ❌ Fns (non-inlined macros)
@@ -79,12 +80,12 @@ return
 
 
 ### Jump destinations
-Unlike `huff-rs`, `py-huff` supports jump destinations larger or smaller than 2-bytes. The size of
-the push opcode will automatically be adjusted to a smaller size. Furthermore `py-huff` has an
+Unlike `huff-rs`, PyHuff supports jump destinations larger or smaller than 2-bytes. The size of
+the push opcode will automatically be adjusted to a smaller size. Furthermore PyHuff has an
 optimization step that will shorten earlier labels if they can fit into smaller push opcodes.
 
 ### Jump Labels
-`huff-rs` currently has some unclear jump label semantics (see [#295](https://github.com/huff-language/huff-rs/issues/295)), `py-huff` attempts to introduce clear jump label scoping and semantics:
+`huff-rs` currently has some unclear jump label semantics (see [#295](https://github.com/huff-language/huff-rs/issues/295)), PyHuff attempts to introduce clear jump label scoping and semantics:
 
 - each label has a scope tied to the macro it's present within
 - duplicate label declarations in the same macro throws an error
