@@ -1,4 +1,5 @@
 from typing import TypeVar, Iterable, Callable, Any
+from Crypto.Hash import keccak
 
 T = TypeVar('T')
 K = TypeVar('K')
@@ -26,3 +27,13 @@ def build_unique_dict(
     for key, value in kvs:
         new_dict = set_unique(new_dict, key, value, on_dup=on_dup)
     return new_dict
+
+
+def s(x: int) -> str:
+    if x == 1:
+        return ''
+    return 's'
+
+
+def keccak256(preimage: bytes) -> bytes:
+    return keccak.new(data=preimage, digest_bits=256).digest()

@@ -89,3 +89,19 @@ def test_events():
 
         expected_runtime='7fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef7f884edad9ce6fa2440d8a54cc123490eb96d2768479d49ff9c7366125a94243647f76fae7629f203ffe0facce0a6c4be1a3f7a1c29f37a5c3907738f3b5f9ab93bc'
     )
+
+
+def test_return_runtime_built_in():
+    compile_test(
+        fp='../examples/small_constructor.huff',
+        expected_deploy='600c8060095f395ff36020355f35015f5260205ff3',
+        expected_runtime='6020355f35015f5260205ff3'
+    )
+
+
+def test_runtime_code_built_in():
+    compile_test(
+        fp='../examples/runtime_code_built_in.huff',
+        expected_deploy='60018060095f395ff300',
+        expected_runtime='00'
+    )

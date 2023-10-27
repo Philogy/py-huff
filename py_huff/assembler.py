@@ -1,6 +1,7 @@
 from typing import NamedTuple
 from enum import Enum
-from .opcodes import Op, create_push, create_plain_op
+from .opcodes import Op, create_push, op
+from .context import ObjectId
 from .utils import build_unique_dict
 
 
@@ -11,12 +12,10 @@ class MarkPurpose(Enum):
     Other = 'Other'
 
 
-ContextId = tuple[int, ...]
 MarkId = NamedTuple(
     'MarkId',
     [
-        ('ctx_id', ContextId),
-        ('sub_id', int),
+        ('obj_id', ObjectId),
         ('purpose', MarkPurpose)
     ]
 )
@@ -31,6 +30,28 @@ SizedRef = NamedTuple(
 
 Asm = Op | Mark | MarkRef | MarkDeltaRef | bytes
 SolidAsm = Op | Mark | SizedRef | bytes
+
+
+def to_start_mark(obj_id: ObjectId) -> Mark:
+    return Mark(MarkId(obj_id, MarkPurpose.Start))
+
+
+def to_end_mark(obj_id: ObjectId) -> Mark:
+    return Mark(MarkId(obj_id, MarkPurpose.End))
+
+
+def to_start_mark_ref(obj_id: ObjectId) -> MarkRef:
+    return MarkRef(MarkId(obj_id, MarkPurpose.Start))
+
+
+def to_end_mark_ref(obj_id: ObjectId) -> MarkRef:
+    return MarkRef(MarkId(obj_id, MarkPurpose.End))
+
+
+def to_size_mark_ref(obj_id: ObjectId) -> MarkDeltaRef:
+    start = MarkId(obj_id, MarkPurpose.Start)
+    end = MarkId(obj_id, MarkPurpose.End)
+    return MarkDeltaRef(start, end)
 
 
 def set_size(ref: SizedRef, size: int) -> SizedRef:
@@ -187,21 +208,3 @@ def asm_to_bytecode(asm: list[Asm]) -> bytes:
     solid_asm = asm_to_solid(asm)
     solid_asm = shorten_asm(solid_asm)
     return solid_asm_to_bytecode(solid_asm)
-
-
-def minimal_deploy(runtime: bytes) -> bytes:
-    start: MarkId = MarkId(tuple(), 0, MarkPurpose.Start)
-    end: MarkId = MarkId(tuple(), 0, MarkPurpose.End)
-    # TODO: Add pre-shanghai (no PUSH0) toggle
-    return asm_to_bytecode([
-        MarkDeltaRef(start, end),
-        create_plain_op('dup1'),
-        MarkRef(start),
-        create_plain_op('push0'),
-        create_plain_op('codecopy'),
-        create_plain_op('push0'),
-        create_plain_op('return'),
-        Mark(start),
-        runtime,
-        Mark(end)
-    ])

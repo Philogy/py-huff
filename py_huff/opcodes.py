@@ -156,8 +156,16 @@ class Op(NamedTuple('Op', [('op', int), ('extra_data', bytes)])):
         yield self.op
         yield from self.extra_data
 
+    def __repr__(self) -> str:
+        extra_data_repr = f' 0x{self.extra_data.hex()}' if self.extra_data else ''
+        for name, op in OP_MAP.items():
+            if op == self.op:
+                return f'{name.upper()}{extra_data_repr}'
 
-def create_plain_op(op_name: str) -> Op:
+        return f'UNKNOWN \'0x{self.op:02x}\' {extra_data_repr}'
+
+
+def op(op_name: str) -> Op:
     assert not op_name.startswith('push') or op_name == 'push0', \
         f'Standalone {op_name} not supported'
     return Op(OP_MAP[op_name], b'')

@@ -1,6 +1,6 @@
 from typing import NamedTuple, Generator
 from .node import ExNode, Content
-from .opcodes import Op, OP_MAP, create_plain_op, create_push
+from .opcodes import Op, OP_MAP, op, create_push
 
 Identifier = str
 MacroParam = NamedTuple('MacroParam', [('ident', Identifier)])
@@ -20,14 +20,6 @@ Macro = NamedTuple('Macro', [
     ('params', list[Identifier]),
     ('body', list[MacroElement])
 ])
-
-CodeTable = NamedTuple(
-    'CodeTable',
-    [
-        ('data', bytes),
-        ('top_level_id', int)
-    ]
-)
 
 
 def identifier(s: Content) -> Identifier:
@@ -92,7 +84,7 @@ def literal_to_bytes(lit: str) -> bytes:
 
 def bytes_to_push(data: bytes) -> Op:
     if len(data) == 1 and data[0] == 0:
-        return create_plain_op('push0')
+        return op('push0')
     return create_push(data)
 
 
@@ -124,7 +116,7 @@ def parse_el(el: ExNode) -> MacroElement:
     elif name == 'identifier':
         ident = el.text()
         if ident in OP_MAP:
-            return create_plain_op(ident)
+            return op(ident)
         else:
             return GeneralRef(identifier(ident))
     elif name == 'dest_definition':

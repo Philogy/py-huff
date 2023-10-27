@@ -1,16 +1,17 @@
+from .context import ContextTracker
+from .utils import build_unique_dict
 from typing import NamedTuple, Iterable
 from collections import defaultdict
-from .opcodes import Op
+from .opcodes import Op, op
 from .node import ExNode
 from .lexer import lex_huff
 from .parser import (
-    Identifier, CodeTable, Macro, get_ident, parse_hex_literal,
+    Identifier, Macro, get_ident, parse_hex_literal,
     bytes_to_push, parse_macro, get_includes
 )
 from .resolver import resolve
-from .codegen import GlobalScope, expand_macro_to_asm
-from .assembler import asm_to_bytecode, Mark, minimal_deploy, MarkPurpose, MarkId
-from .utils import build_unique_dict
+from .codegen import GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData, gen_minimal_init
+from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
 
 CompileResult = NamedTuple(
     'CompileResult',
@@ -19,8 +20,6 @@ CompileResult = NamedTuple(
         ('deploy', bytes)
     ]
 )
-
-TOP_LEVEL_ENTRY_CONTEXT = (0,)
 
 
 def idefs_to_defs(idefs: Iterable[ExNode]) -> dict[str, list[ExNode]]:
@@ -53,12 +52,18 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
         for node in defs['macro']
     )
 
-    assert 'CONSTRUCTOR' not in macros, 'Custom constructors not yet supported'
+    context = ContextTracker(tuple())
 
     # TODO: Warn when literal has odd digits
     code_tables: dict[Identifier, CodeTable] = build_unique_dict(
-        (get_ident(node), CodeTable(parse_hex_literal(node.get('hex_literal')), i))
-        for i, node in enumerate(defs['code_table'], start=1)
+        (
+            get_ident(node),
+            CodeTable(
+                parse_hex_literal(node.get('hex_literal')),
+                context.next_obj_id()
+            )
+        )
+        for node in defs['code_table']
     )
 
     for ctable in code_tables:
@@ -76,24 +81,65 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
 
     assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'
 
-    asm = expand_macro_to_asm(
+    globals = GlobalScope(
+        macros,
+        constants,
+        code_tables,
+        functions,
+        events
+    )
+    main_scope = Scope(globals, None)
+    runtime_asm = expand_macro_to_asm(
         'MAIN',
-        GlobalScope(macros, constants, code_tables, functions, events),
+        main_scope,
         [],
         {},
-        TOP_LEVEL_ENTRY_CONTEXT,
+        context.next_sub_context(),
         tuple()
     )
 
-    for table in code_tables.values():
-        asm.extend([
-            Mark(MarkId(tuple(), table.top_level_id, MarkPurpose.Start)),
-            table.data,
-            Mark(MarkId(tuple(), table.top_level_id, MarkPurpose.End)),
+    for table in main_scope.referenced_tables:
+        code_table = globals.code_tables[table]
+        runtime_asm.extend([
+            to_start_mark(code_table.obj_id),
+            code_table.data,
+            to_end_mark(code_table.obj_id)
         ])
 
-    runtime = asm_to_bytecode(asm)
-    deploy = minimal_deploy(runtime)
+    runtime = asm_to_bytecode(runtime_asm)
+
+    runtime_obj_id = context.next_obj_id()
+    if 'CONSTRUCTOR' in macros:
+        init_scope = Scope(globals, ConstructorData(runtime_obj_id))
+        init_asm = expand_macro_to_asm(
+            'CONSTRUCTOR',
+            init_scope,
+            [],
+            {},
+            context.next_sub_context(),
+            tuple()
+        )
+        for table in main_scope.referenced_tables:
+            code_table = globals.code_tables[table]
+            init_asm.extend([
+                to_start_mark(code_table.obj_id),
+                code_table.data,
+                to_end_mark(code_table.obj_id)
+            ])
+        init_asm.extend([
+            to_start_mark(runtime_obj_id),
+            runtime,
+            to_end_mark(runtime_obj_id)
+        ])
+        deploy = asm_to_bytecode(init_asm)
+    else:
+        init_asm = [
+            *gen_minimal_init(runtime_obj_id, op('push0')),
+            to_start_mark(runtime_obj_id),
+            runtime,
+            to_end_mark(runtime_obj_id)
+        ]
+        deploy = asm_to_bytecode(init_asm)
 
     return CompileResult(
         runtime=runtime,

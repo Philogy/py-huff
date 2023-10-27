@@ -1,0 +1,18 @@
+#define macro CONSTRUCTOR() = takes(0) returns(0) {
+    // owner = msg.sender
+    caller
+    0x0
+    sstore
+    // return runtime
+    __RUNTIME_SIZE()
+    dup1
+    __RUNTIME_START()
+    0x0
+    codecopy
+    0x0
+    return
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    stop
+}

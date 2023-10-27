@@ -1,5 +1,9 @@
 # `py-huff`
-`py-huff` is a Huff compiler written in Python.
+
+`py-huff` is a compiler for Huff, an EVM assembly language written in Python.
+
+> [!WARNING]
+> This repo is experimental, for a more tested Huff compiler see [huff-rs](https://github.com/huff-language/huff-rs)
 
 ## Installation
 
@@ -9,11 +13,11 @@ Important: Python 3.10 or higher is required
 2. `cd py-huff`
 3. `pip install -e .`
 
-Ready to use either `py_huff` itself as a Python Huff compilation or the `huffy` CLI wrapper.
+Ready to use either `py_huff` itself as a Python API for Huff as a CLI via `huffy`.
 
 ## Usage
 
-**Compile code adding minimal deploy code**
+**Compile code (Compiles constructor or adds default)**
 ```
 huffy -b my_huff_contract.huff
 ```
@@ -32,8 +36,48 @@ huffy -r my_huff_contract.huff
   [METH](https://github.com/philogy/meth-weth)
 
 ## Differences vs. [`huff-rs`](https://github.com/huff-language/huff-rs/)
-Besides the missing features as listed under _Features_ this implementation has a few differences to
-`huff-rs` (as of [`813b6b6`](https://github.com/huff-language/huff-rs/commit/813b6b683dd214dfca71d49284afd885dd9eef09)).
+
+### New Features
+**Constructor Helpers (Only usable from constructor)**
+- `__RUNTIME_START()`: Generates a `PUSH` with the code offset of where the runtime bytecode begins.
+- `__RUNTIME_SIZE()`: Generates a `PUSH` with the length in bytes of the runtime code. Can be used
+  together with `__RUNTIME_START` to create a custom constructor:
+
+```
+#define macro CONSTRUCTOR() = takes(0) returns(0) {
+    // owner = msg.sender
+    caller
+    0x0
+    sstore
+    // return runtime
+    __RUNTIME_SIZE()
+    dup1
+    __RUNTIME_START()
+    0x0
+    codecopy
+    0x0
+    return
+}
+```
+- `__RETURN_RUNTIME(offset: Op)`: Generates the default constructor, copying the runtime code to the
+  offset pushed by `offset`, equivalent to:
+```
+__RUNTIME_SIZE()
+dup1
+__RUNTIME_START()
+<offset>
+codecopy
+<offset
+return
+```
+
+### Missing Features
+- ❌ Jump Tables (❌ normal, ❌ packed, ✅ code (already present))
+- ❌ `__codesize`
+- ❌ `FREE_STORAGE_POINTER()`
+- ❌ Fns (non-inlined macros)
+    - ❌ Recursion
+
 
 ### Jump destinations
 Unlike `huff-rs`, `py-huff` supports jump destinations larger or smaller than 2-bytes. The size of
@@ -76,34 +120,3 @@ optimization step that will shorten earlier labels if they can fit into smaller 
         E()            <throws>
     }
     ```
-
-## Features
-### Core Huff Features
-- ✅ Opcodes
-- ✅ Hex literals (e.g. `0x238a`)
-- ✅ Jump labels
-- ✅ Macros
-    - ✅ Macro arguments (✅ literals, ✅ jump labels, ✅ macro parameters)
-    - ✅ Nested macros (e.g. `A() -> B() -> C()`)
-- ✅ Runtime bytecode
-- ❌ Deploy bytecode
-    - ✅ Minimal deploy code
-    - ❌ Custom constructors
-### Added Features
-- ❌ Tables
-    - ✅ Code Tables
-    - ❌ Jump Tables (❌ normal, ❌ packed)
-- ❌ Built-ins
-    - ✅ `__EVENT_HASH`
-    - ✅ `__FUNC_SIG`
-    - ❌ `__codesize`
-    - ✅ `__tablestart`
-    - ✅ `__tablesize`
-- ✅ Importing files via `#includes`
-- ❌ `FREE_STORAGE_POINTER()`
-
-### Niche/Advanced Features
-- ✅ Push literals (e.g. `push4 0x010`)
-- ❌ Fns (non-inlined macros)
-    - ❌ Recursion
-
