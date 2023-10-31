@@ -202,7 +202,10 @@ def invoke_built_in(fn_name: str, scope: Scope, args: list[InvokeArg]) -> list[A
     return BUILT_INS[fn_name](fn_name, scope, args)
 
 
-def gen_constants(raw_constants: Iterable[tuple[Identifier, Optional[bytes]]]) -> dict[Identifier, Op]:
+def gen_constants(
+        raw_constants: Iterable[tuple[Identifier, Optional[bytes]]],
+        constant_overrides: dict[Identifier, bytes]
+) -> dict[Identifier, Op]:
     constants: dict[Identifier, Op] = {}
     free_ptr: int = 0
     for ident, value in raw_constants:
@@ -218,6 +221,9 @@ def gen_constants(raw_constants: Iterable[tuple[Identifier, Optional[bytes]]]) -
             bytes_to_push(value),
             on_dup=lambda ident: f'Duplicate constant "{ident}"'
         )
+    for ident, value in constant_overrides.items():
+        assert ident in constants, f'Override for nonexistent constant "{ident}"'
+        constants[ident] = bytes_to_push(value)
     return constants
 
 

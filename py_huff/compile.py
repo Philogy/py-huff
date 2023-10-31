@@ -29,23 +29,29 @@ def idefs_to_defs(idefs: Iterable[ExNode]) -> dict[str, list[ExNode]]:
     return defs
 
 
-def compile(entry_fp: str) -> CompileResult:
-    return compile_from_defs(idefs_to_defs(resolve(entry_fp)))
+def compile(entry_fp: str, constant_overrides: dict[Identifier, bytes]) -> CompileResult:
+    return compile_from_defs(idefs_to_defs(resolve(entry_fp)), constant_overrides)
 
 
-def compile_src(src: str) -> CompileResult:
+def compile_src(src: str, constant_overrides: dict[Identifier, bytes]) -> CompileResult:
     root = lex_huff(src)
     includes, idefs = get_includes(root)
     assert not includes, f'Cannot compile directly from source if it contains includes'
-    return compile_from_defs(idefs_to_defs(idefs))
+    return compile_from_defs(idefs_to_defs(idefs), constant_overrides)
 
 
-def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
+def compile_from_defs(
+        defs: dict[str, list[ExNode]],
+        constant_overrides: dict[Identifier, bytes]
+) -> CompileResult:
 
     # TODO: Make sure constants, macros and code tables are unique
     constants: dict[Identifier, Op] = gen_constants(
-        (get_ident(const), parse_constant(const))
-        for const in defs['const']
+        (
+            (get_ident(const), parse_constant(const))
+            for const in defs['const']
+        ),
+        constant_overrides
     )
 
     macros: dict[Identifier, Macro] = build_unique_dict(
