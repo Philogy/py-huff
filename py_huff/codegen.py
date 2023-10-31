@@ -212,7 +212,12 @@ def gen_constants(raw_constants: Iterable[tuple[Identifier, Optional[bytes]]]) -
                 'big'
             )
             free_ptr += 1
-        set_unique(constants, ident, bytes_to_push(value))
+        set_unique(
+            constants,
+            ident,
+            bytes_to_push(value),
+            on_dup=lambda ident: f'Duplicate constant "{ident}"'
+        )
     return constants
 
 
@@ -239,6 +244,8 @@ def expand_macro_to_asm(
 
     asm: list[Asm] = []
 
+    macro_trace_repr = ' -> '.join(visited_macros)
+
     for el in macro.body:
         if not isinstance(el, LabelDef):
             continue
@@ -246,15 +253,15 @@ def expand_macro_to_asm(
         dest_id: MarkId = MarkId(ctx.next_obj_id(), MarkPurpose.Label)
         # TODO: Add warning when invoked macro has label shadowing parent
         assert label not in labels or labels[label] != dest_id, \
-            f'Duplicate label "{label}" in macro "{macro.ident}"'
+            f'Duplicate label "{label}" in macro "{macro_trace_repr}"'
         labels[label] = dest_id
 
     def lookup_label(ident: Identifier) -> MarkRef:
-        assert ident in labels, f'Label "{ident}" not found in scope ({ctx.ctx})'
+        assert ident in labels, f'Label "{ident}" not found in {macro_trace_repr}'
         return MarkRef(labels[ident])
 
     def lookup_arg(ident: Identifier) -> MacroArg:
-        assert ident in ident_to_arg, f'Invalid macro argument "{ident}"'
+        assert ident in ident_to_arg, f'Invalid macro argument "{ident}" in {macro_trace_repr}'
         return ident_to_arg[ident]
 
     for el in macro.body:
@@ -291,7 +298,11 @@ def expand_macro_to_asm(
                         el.ident,
                         scope,
                         invoke_args,
-                        labels.copy(),
+                        {
+                            label: mid
+                            for label, mid in labels.items()
+                            if label.startswith('global_')
+                        },
                         ctx.next_sub_context(),
                         visited_macros
                     )

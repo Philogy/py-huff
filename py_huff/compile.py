@@ -49,8 +49,11 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
     )
 
     macros: dict[Identifier, Macro] = build_unique_dict(
-        ((macro := parse_macro(node)).ident, macro)
-        for node in defs['macro']
+        (
+            ((macro := parse_macro(node)).ident, macro)
+            for node in defs['macro']
+        ),
+        on_dup='macro'
     )
 
     context = ContextTracker(tuple())
@@ -58,26 +61,35 @@ def compile_from_defs(defs: dict[str, list[ExNode]]) -> CompileResult:
     # TODO: Warn when literal has odd digits
     code_tables: dict[Identifier, CodeTable] = build_unique_dict(
         (
-            get_ident(node),
-            CodeTable(
-                parse_hex_literal(node.get('hex_literal')),
-                context.next_obj_id()
+            (
+                get_ident(node),
+                CodeTable(
+                    parse_hex_literal(node.get('hex_literal')),
+                    context.next_obj_id()
+                )
             )
-        )
-        for node in defs['code_table']
+            for node in defs['code_table']
+        ),
+        on_dup='code table'
     )
 
     for ctable in code_tables:
         assert ctable not in macros, f'Already defined macro with name "{ctable}"'
 
     functions: dict[Identifier, ExNode] = build_unique_dict(
-        (get_ident(fn), fn)
-        for fn in defs['function']
+        (
+            (get_ident(fn), fn)
+            for fn in defs['function']
+        ),
+        on_dup='function'
     )
 
     events: dict[Identifier, ExNode] = build_unique_dict(
-        (get_ident(e), e)
-        for e in defs['event']
+        (
+            (get_ident(e), e)
+            for e in defs['event']
+        ),
+        on_dup='event'
     )
 
     assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'

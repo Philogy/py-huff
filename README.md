@@ -67,7 +67,7 @@ dup1
 __RUNTIME_START()
 <offset>
 codecopy
-<offset
+<offset>
 return
 ```
 
@@ -89,37 +89,10 @@ optimization step that will shorten earlier labels if they can fit into smaller 
 
 - each label has a scope tied to the macro it's present within
 - duplicate label declarations in the same macro throws an error
-- invoked macros can only access labels defined in their own context or their parent's
-- a reference to a label will select the deepest one e.g.
-    ```
-    #define macro A() = takes(0) returns(0) {
-        label:         <-------------\
-        B()                          |
-        label jump     references ---/
-    }
-
-    #define macro B() = takes(0) returns(0) {
-        label:         <--------------------------\
-        C()                                       |
-    }                                             |
-                                                  |
-    #define macro C() = takes(0) returns(0) {     |
-        D()                                       |
-    }                                             |
-                                                  |
-    #define macro D() = takes(0) returns(0) {     |
-        label jump     references ----------------/
-    }
-
-    #define macro E() = takes(0) returns(0) {
-        label jump
-    }
-
-    #define macro MAIN() = takes(0) returns(0) {
-        A()
-        E()            <throws>
-    }
-    ```
+- invoked macros can only access labels defined in their own context
+- child macros can access labels defined in parents only if
+  - it's explicitly made available via a macro parameter
+  - it's prefixed with `global_`
 
 ### Default Constructor Code Return
 
