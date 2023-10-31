@@ -2,10 +2,17 @@ import os
 from py_huff.compile import compile
 
 
-def compile_test(fp: str, expected_deploy: str, expected_runtime: str):
+def compile_test(
+    fp: str,
+    expected_deploy: str,
+    expected_runtime: str,
+    constant_overrides=None
+):
+    if constant_overrides is None:
+        constant_overrides = {}
     # Resolve relative path
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), fp)
-    result = compile(path)
+    result = compile(path, constant_overrides)
     assert result.deploy.hex() == expected_deploy.strip(), 'Deploy code failed to match'
     assert result.runtime.hex() == expected_runtime.strip(), 'Runtime code failed to match'
 

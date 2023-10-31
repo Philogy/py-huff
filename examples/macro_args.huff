@@ -12,12 +12,12 @@
 }
 
 #define macro SAFE_ADD() = takes(2) returns(1) {
-    SAFE_OP(add, empty_revert, lt)
+    SAFE_OP(add, global_empty_revert, lt)
 }
 
 
 #define macro SAFE_SUB() = takes(2) returns(1) {
-    SAFE_OP(sub, empty_revert, gt)
+    SAFE_OP(sub, global_empty_revert, gt)
 }
 
 #define macro LOAD(offset) = takes(0) returns(1) {
@@ -26,16 +26,15 @@
 
 
 #define macro MAIN() = takes(0) returns(0) {
-        LOAD(0x40)
-
-            LOAD(0x00)
-            LOAD(0x20)
-        SAFE_ADD()
+    LOAD(0x40)
+    LOAD(0x00)
+    LOAD(0x20)
+    SAFE_ADD()
     SAFE_SUB()
 
         msize mstore
     msize 0x0 return
 
-    empty_revert:
+    global_empty_revert:
         0x0 0x0 revert
 }
