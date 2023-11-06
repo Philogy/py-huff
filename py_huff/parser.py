@@ -1,5 +1,5 @@
-from typing import NamedTuple, Generator, Optional
-from .node import ExNode, Content
+from typing import NamedTuple, Generator, Optional, Sequence
+from .node import ExNode, Content, ContentType
 from .opcodes import Op, OP_MAP, op, create_push
 
 Identifier = str
@@ -44,19 +44,24 @@ def event_to_sig(fn: ExNode) -> str:
     return f'{name}({",".join(parsed_args)})'
 
 
-def parse_type_to_sig(t: ExNode) -> str:
+def parse_type_to_sig(t: ExNode, expand_tuple=True) -> str:
     if isinstance(t.content, str):
         return 'uint256' if t.content == 'uint' else t.content
     if t.name == 'tuple':
-        return tuple_to_compact_sig(t)
+        if expand_tuple:
+            return tuple_to_compact_sig(t, expand_tuple=expand_tuple)
+        else:
+            return 'tuple'
     assert len(t.content) == 2, f'{t} not len 2'
     prim, snd = t.content
     if snd.name == 'num':
         base_type = prim.text()
         if base_type == 'uint':
-            assert snd.text() in [*map(str, range(8, 256+1, 8))]
+            assert snd.text() in [*map(str, range(8, 256+1, 8))], \
+                f'Invalid uintN size {int(snd.text())}'
         elif base_type == 'bytes':
-            assert snd.text() in [*map(str, range(1, 32+1))]
+            assert snd.text() in [*map(str, range(1, 32+1))], \
+                f'Invalid bytesN size {int(snd.text())}'
         else:
             raise ValueError(f'Unrecognized type with num {t.name}')
         return prim.text() + snd.text()
@@ -66,16 +71,20 @@ def parse_type_to_sig(t: ExNode) -> str:
             'Dual node not bracket'
         if len(children) == 3:
             assert children[1].text() != '0', f'Array quantifier cannot be 0'
-        return f'{parse_type_to_sig(prim)}{"".join(c.text() for c in children)}'
+        return f'{parse_type_to_sig(prim, expand_tuple=expand_tuple)}{"".join(c.text() for c in children)}'
 
 
-def tuple_to_compact_sig(node: ExNode) -> str:
+def tuple_to_compact_sig(node: ExNode, expand_tuple=True) -> str:
     types = node.get_all_deep('type')
-    return f'({",".join(map(parse_type_to_sig, types))})'
+    return f'({",".join(parse_type_to_sig(t, expand_tuple=expand_tuple) for t in types)})'
 
 
-def get_ident(node: ExNode) -> Identifier:
-    return identifier(node.get('identifier').text())
+def get_ident(node: ExNode, default: Optional[Identifier] = None) -> Identifier:
+    if default is None:
+        return identifier(node.get('identifier').text())
+    if (ident_node := node.maybe_get('identifier')) is None:
+        return default
+    return ident_node.text()
 
 
 def literal_to_bytes(lit: str) -> bytes:
@@ -182,11 +191,110 @@ def get_includes(root: ExNode) -> tuple[list[str], list[ExNode]]:
     return includes, other_nodes
 
 
+Json = list['Json'] | dict[str, 'Json'] | str | int | None | bool
+Abi = list[Json]
+
+
+def get_paren_nodes(paren_outer_nodes: list[ExNode]) -> list[ExNode]:
+    if len(paren_outer_nodes) == 0:
+        return []
+    elif len(paren_outer_nodes) == 1:
+        return paren_outer_nodes
+    elif len(paren_outer_nodes) == 2:
+        flattened_input_nodes: list[ExNode] = []
+        last_first_nodes = paren_outer_nodes[0].children()[-1]
+        if isinstance(last_first_nodes.content, str) and last_first_nodes.content == ',':
+            flattened_input_nodes.append(paren_outer_nodes[0])
+        else:
+            flattened_input_nodes.extend(paren_outer_nodes[0].children())
+        flattened_input_nodes.append(paren_outer_nodes[1])
+
+        return flattened_input_nodes
+    else:
+        raise ValueError(
+            f'Expect 0-2 outer paren nodes got {len(paren_outer_nodes)}'
+        )
+
+
+def parse_single_value_to_abi(node: ExNode) -> dict[str, Json]:
+    if node.name == 'type':
+        input_type_node = node
+    else:
+        input_type_node = node.get('type')
+    input_type = parse_type_to_sig(input_type_node, expand_tuple=False)
+    if input_type_node.ctype() == ContentType.SubNodes and\
+            (tuple_node := input_type_node.maybe_get('tuple')) is not None:
+        components = parse_tuple_to_values(tuple_node)
+    else:
+        components = []
+
+    d: dict[str, Json] = {
+        'name': get_ident(node, ''),
+        'type': input_type
+    }
+    if components:
+        d['components'] = components
+    return d
+
+
+def parse_tuple_to_values(tuple_node: ExNode) -> Json:
+    inner_nodes = tuple_node.children()
+    assert inner_nodes[0].text() == '(' and inner_nodes[-1].text() == ')', \
+        'Expected to only exclude brackets'
+    outer_input_nodes = inner_nodes[1:-1]
+    input_nodes = get_paren_nodes(outer_input_nodes)
+
+    return [
+        parse_single_value_to_abi(child)
+        for child in input_nodes
+    ]
+
+
+def func_to_abi(item: tuple[Identifier, ExNode]) -> Json:
+    ident, func = item
+    top_level_input_node, output_nodes = func.get_all('tuple')
+    return {
+        'type': 'function',
+        'name': ident,
+        'inputs': parse_tuple_to_values(top_level_input_node),
+        'outputs': parse_tuple_to_values(output_nodes),
+        'stateMutability': func.get('mutability').text()
+    }
+
+
+def funcs_to_abi(functions: dict[Identifier, ExNode]) -> Abi:
+    return list(map(func_to_abi, functions.items()))
+
+
+def parse_event_arg(event_arg: ExNode) -> Json:
+    event_arg._disp()
+    return {
+        'indexed': any(c.content == 'indexed' for c in event_arg.children()),
+        ** parse_single_value_to_abi(event_arg)
+    }
+
+
+def events_to_abi(events: dict[Identifier, ExNode]) -> Abi:
+    return [
+        {
+            'type': 'event',
+            'name': ident,
+            'inputs': list(map(parse_event_arg, event.get_all_deep('event_arg'))),
+            'anonymous': False
+        }
+        for ident, event in events.items()
+    ]
+
+
+def parse_to_abi(functions: dict[Identifier, ExNode], events: dict[Identifier, ExNode]) -> Abi:
+    return funcs_to_abi(functions) + events_to_abi(events)
+
+
 def parse_constant(node: ExNode) -> Optional[bytes]:
     assert node.name == 'const'
     value_node = node.get_idx(4)
     if value_node.name == 'hex_literal':
         return parse_hex_literal(value_node)
-    assert value_node.text() == 'FREE_STORAGE_POINTER()',\
+    assert value_node.text() == 'FREE_STORAGE_POINTER()', \
         f'Constant node {node} neither hex literal or FREE_STORAGE_POINTER()'
     return None

@@ -18,7 +18,8 @@ HUFF_GRAMMAR = Grammar(
 
     code_table = "#define" ws "table" ws identifier ws "{{" gap hex_literal gap "}}"
 
-    function = "#define" ws "function" ws identifier ws tuple ws ("view" / "nonpayable" / "payable") ws "returns" ws tuple
+    function = "#define" ws "function" ws identifier ws tuple ws mutability ws "returns" ws tuple
+    mutability = "view" / "nonpayable" / "payable"
 
     event = "#define" ws "event" ws identifier ws "(" ws (event_arg ws "," ws )* event_arg? ws ")"
     event_arg = type ws "indexed"? ws identifier?

@@ -1,4 +1,5 @@
 from typing import NamedTuple, Iterable
+import json
 from collections import defaultdict
 from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
 from .context import ContextTracker
@@ -6,7 +7,10 @@ from .utils import build_unique_dict
 from .opcodes import Op, op
 from .node import ExNode
 from .lexer import lex_huff
-from .parser import Identifier, Macro, get_ident, parse_hex_literal, parse_macro, get_includes, parse_constant
+from .parser import (
+    Identifier, Macro, get_ident, parse_hex_literal, parse_macro, get_includes,
+    parse_constant, parse_to_abi, Abi
+)
 from .resolver import resolve
 from .codegen import (
     GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData,
@@ -17,7 +21,8 @@ CompileResult = NamedTuple(
     'CompileResult',
     [
         ('runtime', bytes),
-        ('deploy', bytes)
+        ('deploy', bytes),
+        ('abi', Abi)
     ]
 )
 
@@ -98,6 +103,9 @@ def compile_from_defs(
         on_dup='event'
     )
 
+    abi: Abi = parse_to_abi(functions, events)
+    print(json.dumps(abi, indent=2))
+
     assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'
 
     globals = GlobalScope(
@@ -162,5 +170,6 @@ def compile_from_defs(
 
     return CompileResult(
         runtime=runtime,
-        deploy=deploy
+        deploy=deploy,
+        abi=abi
     )

@@ -1,4 +1,4 @@
-from typing import NamedTuple, Generator, Union
+from typing import NamedTuple, Generator, Optional
 from enum import Enum
 
 Content = list['ExNode'] | str
@@ -34,24 +34,31 @@ class ExNode (NamedTuple(
             raise TypeError(f'Node has sub nodes, no direct string content')
         return self.content
 
-    def get_all_deep(self, name) -> Generator['ExNode', None, None]:
+    def get_all_deep(self, name, depth: int = -1) -> Generator['ExNode', None, None]:
+        if self.name == name:
+            yield self
+            return
         if isinstance(self.content, str):
+            return
+        if depth == 0:
             return
         assert isinstance(self.content, list)
         for child in self.content:
             if child.name == name:
                 yield child
             else:
-                yield from child.get_all_deep(name)
+                yield from child.get_all_deep(name, depth=depth - 1)
 
     def get_all(self, name: str) -> Generator['ExNode', None, None]:
-        return (
+        if isinstance(self.content, str):
+            return
+        yield from (
             child
-            for child in self.children()
+            for child in self.content
             if child.name == name
         )
 
-    def maybe_get(self, name: str) -> Union['ExNode', None]:
+    def maybe_get(self, name: str) -> Optional['ExNode']:
         matches = list(self.get_all(name))
         if len(matches) > 1:
             raise ValueError(

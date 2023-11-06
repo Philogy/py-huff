@@ -1,8 +1,8 @@
 #define function a() nonpayable returns ()
-#define function b(uint) view returns (uint)
+#define function b(uint loool) view returns (uint)
 #define function c(uint,string[] hello,bytes4[],bytes3,bytes3[]) payable returns (uint)
 #define function d((uint y,uint x)[3],uint16[]) view returns (uint)
-#define function wow58(uint256) view returns ()
+#define function wow58(uint256 bob) view returns (string x)
 
 
 #define macro MAIN() = takes(0) returns(0) {
