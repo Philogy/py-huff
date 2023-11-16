@@ -104,7 +104,6 @@ def compile_from_defs(
     )
 
     abi: Abi = parse_to_abi(functions, events)
-    print(json.dumps(abi, indent=2))
 
     assert 'MAIN' in macros, 'Program must contain MAIN macro entry point'
 
