@@ -33,7 +33,8 @@ GlobalScope = NamedTuple(
         ('constants', dict[Identifier, Op]),
         ('code_tables', dict[Identifier, CodeTable]),
         ('functions', dict[Identifier, ExNode]),
-        ('events', dict[Identifier, ExNode])
+        ('events', dict[Identifier, ExNode]),
+        ('errors', dict[Identifier, ExNode])
     ]
 )
 
@@ -73,6 +74,10 @@ class Scope:
         assert ident in self.__g.events, f'Undefined event "{ident}"'
         return self.__g.events[ident]
 
+    def get_error(self, ident: Identifier) -> ExNode:
+        assert ident in self.__g.errors, f'Undefined function "{ident}"'
+        return self.__g.errors[ident]
+
 
 def not_implemented(fn_name, *_) -> list[Asm]:
     raise ValueError(f'Built-in {fn_name} not implemented yet')
@@ -80,7 +85,7 @@ def not_implemented(fn_name, *_) -> list[Asm]:
 
 def validate_params(name: str, args: list[InvokeArg], params: list[inspect.Parameter]):
     for i, (arg, param) in enumerate(zip(args, params), start=1):
-        assert isinstance(arg, param.annotation) or param.annotation is inspect._empty,\
+        assert isinstance(arg, param.annotation) or param.annotation is inspect._empty, \
             f'{name}: Invalid type {type(arg).__name__} found for arg {i} "{param.name}", expected {param.annotation.__name__}'
 
     amount_delta = len(args) - len(params)
@@ -110,9 +115,9 @@ def valid_annotation(param: inspect.Parameter, expected: Any) -> bool:
 def constructor_builtin(f: Callable[..., list[Asm]]):
     params = list(inspect.signature(f).parameters.values())
 
-    assert valid_annotation(params[0], Scope),\
+    assert valid_annotation(params[0], Scope), \
         f'Constructor built-in must accept `Scope` as first input (found {params[0].annotation})'
-    assert valid_annotation(params[1], ConstructorData),\
+    assert valid_annotation(params[1], ConstructorData), \
         f'Constructor built-in must accept `ConstructorData` as second input (found {params[1].annotation})'
 
     def inner_builtin(name: str, scope: Scope, args: list[InvokeArg]) -> list[Asm]:
@@ -152,9 +157,18 @@ def table_size(scope: Scope, table_ref: GeneralRef) -> list[Asm]:
 
 
 @builtin
-def function_sig(scope: Scope, fn_ref: GeneralRef) -> list[Asm]:
-    f = scope.get_function(fn_ref.ident)
-    sig = function_to_sig(f)
+def function_sig(scope: Scope, ref: GeneralRef) -> list[Asm]:
+    try:
+        f = scope.get_function(ref.ident)
+        sig = function_to_sig(f)
+    except AssertionError:
+        try:
+            err = scope.get_error(ref.ident)
+            sig = error_to_sig(err)
+        except AssertionError:
+            raise AssertionError(
+                f'No error / function of name "{ref.ident}" found'
+            )
     return [
         create_push(keccak256(sig.encode())[:4])
     ]
@@ -258,7 +272,7 @@ def expand_macro_to_asm(
         label = el.ident
         dest_id: MarkId = MarkId(ctx.next_obj_id(), MarkPurpose.Label)
         # TODO: Add warning when invoked macro has label shadowing parent
-        assert label not in labels or labels[label] != dest_id, \
+        assert label not in labels or labels[label].different_ctx(dest_id), \
             f'Duplicate label "{label}" in macro "{macro_trace_repr}"'
         labels[label] = dest_id
 

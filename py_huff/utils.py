@@ -6,24 +6,24 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 
-DupErrorGen = Callable[[str], str]
+DupErrorGen = Callable[[K], str]
 
 
 def default_unique_error(ident):
     return f'Duplicate unique_dict key {ident}'
 
 
-def set_unique(d: dict[str, V], k: str, v: V,  on_dup: DupErrorGen | str = default_unique_error) -> dict[str, V]:
+def set_unique(d: dict[K, V], k: K, v: V,  on_dup: DupErrorGen | str = default_unique_error) -> dict[K, V]:
     assert k not in d, on_dup(k) if callable(on_dup) else on_dup
     d[k] = v
     return d
 
 
 def build_unique_dict(
-    kvs: Iterable[tuple[str, V]],
+    kvs: Iterable[tuple[K, V]],
     on_dup: DupErrorGen | str = 'unique_dict key'
-) -> dict[str, V]:
-    new_dict: dict[str, V] = {}
+) -> dict[K, V]:
+    new_dict: dict[K, V] = {}
     for key, value in kvs:
         new_dict = set_unique(
             new_dict,

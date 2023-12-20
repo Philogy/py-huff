@@ -95,6 +95,14 @@ def compile_from_defs(
         on_dup='function'
     )
 
+    errors: dict[Identifier, ExNode] = build_unique_dict(
+        (
+            (get_ident(err), err)
+            for err in defs['error']
+        ),
+        on_dup='error'
+    )
+
     events: dict[Identifier, ExNode] = build_unique_dict(
         (
             (get_ident(e), e)
@@ -112,7 +120,8 @@ def compile_from_defs(
         constants,
         code_tables,
         functions,
-        events
+        events,
+        errors
     )
     main_scope = Scope(globals, None)
     runtime_asm = expand_macro_to_asm(

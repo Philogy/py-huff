@@ -34,6 +34,12 @@ def function_to_sig(fn: ExNode) -> str:
     return f'{get_ident(fn)}{tuple_to_compact_sig(args)}'
 
 
+def error_to_sig(fn: ExNode) -> str:
+    assert fn.name == 'error'
+    args,  = fn.get_all('tuple')
+    return f'{get_ident(fn)}{tuple_to_compact_sig(args)}'
+
+
 def event_to_sig(fn: ExNode) -> str:
     name = get_ident(fn)
     args = fn.get_all_deep('event_arg')
@@ -267,7 +273,6 @@ def funcs_to_abi(functions: dict[Identifier, ExNode]) -> Abi:
 
 
 def parse_event_arg(event_arg: ExNode) -> Json:
-    event_arg._disp()
     return {
         'indexed': any(c.content == 'indexed' for c in event_arg.children()),
         ** parse_single_value_to_abi(event_arg)

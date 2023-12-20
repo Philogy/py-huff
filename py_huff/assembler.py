@@ -12,13 +12,17 @@ class MarkPurpose(Enum):
     Other = 'Other'
 
 
-MarkId = NamedTuple(
+class MarkId (NamedTuple(
     'MarkId',
     [
         ('obj_id', ObjectId),
         ('purpose', MarkPurpose)
     ]
-)
+)):
+    def different_ctx(self, other: 'MarkId') -> bool:
+        return self.obj_id.ctx_id != other.obj_id.ctx_id
+
+
 Mark = NamedTuple('Mark', [('mid', MarkId)])
 MarkRef = NamedTuple('MarkRef', [('mid', MarkId)])
 MarkDeltaRef = NamedTuple('MarkDeltaRef', [('start', MarkId), ('end', MarkId)])
@@ -115,11 +119,11 @@ def validate_asm(asm: list[Asm]) -> None:
     marks have unique IDs
     '''
     # Checks that all MarkIDs are unique while build indices dict
-    indices: dict[MarkId, int] = build_unique_dict(
+    indices: dict[MarkId, int] = build_unique_dict([
         (step.mid, i)
         for i, step in enumerate(asm)
         if isinstance(step, Mark)
-    )
+    ], lambda mid: f'Duplicate mid #{mid}')
     for i, step in enumerate(asm):
         if isinstance(step, MarkRef):
             assert step.mid in indices, f'Assembly step #{i} has invalid reference to {step.mid}'
