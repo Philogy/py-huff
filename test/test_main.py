@@ -12,7 +12,7 @@ def compile_test(
         constant_overrides = {}
     # Resolve relative path
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), fp)
-    result = compile(path, constant_overrides)
+    result = compile(path, constant_overrides, False)
     assert result.deploy.hex() == expected_deploy.strip(), 'Deploy code failed to match'
     assert result.runtime.hex() == expected_runtime.strip(), 'Runtime code failed to match'
 
@@ -20,16 +20,16 @@ def compile_test(
 def test_simple():
     compile_test(
         fp='../examples/single_main.huff',
-        expected_deploy='600d8060095f395ff3600362017389015f5260205ff3',
-        expected_runtime='                 600362017389015f5260205ff3'
+        expected_deploy='6c600362017389015f5260205ff35f52600d6013f3',
+        expected_runtime=' 600362017389015f5260205ff3'
     )
 
 
 def test_single_macro():
     compile_test(
         fp='../examples/single_macro.huff',
-        expected_deploy='600b8060095f395ff35f35602035015952595ff3',
-        expected_runtime='5f35602035015952595ff3'
+        expected_deploy='6a5f35602035015952595ff35f52600b6015f3',
+        expected_runtime=' 5f35602035015952595ff3'
     )
 
 
@@ -37,7 +37,7 @@ def test_simple_labels():
     compile_test(
         fp='../examples/simple_labels.huff',
         expected_deploy='60238060095f395ff35f35600181600c5760205ff35b5f915b91810190916001900380600f57915f52595ff3',
-        expected_runtime='5f35600181600c5760205ff35b5f915b91810190916001900380600f57915f52595ff3'
+        expected_runtime='                 5f35600181600c5760205ff35b5f915b91810190916001900380600f57915f52595ff3'
 
     )
 
@@ -46,14 +46,14 @@ def test_macro_args():
     compile_test(
         fp='../examples/macro_args.huff',
         expected_deploy='60278060095f395ff36040355f35602035908101818110602357905090810381811160235790505952595ff35b5f5ffd',
-        expected_runtime='6040355f35602035908101818110602357905090810381811160235790505952595ff35b5f5ffd'
+        expected_runtime='                 6040355f35602035908101818110602357905090810381811160235790505952595ff35b5f5ffd'
     )
 
 
 def test_const_ref():
     compile_test(
         fp='../examples/const_ref.huff',
-        expected_deploy='60048060095f395ff360826082',
+        expected_deploy='63608260825f526004601cf3',
         expected_runtime='60826082'
     )
 
@@ -61,7 +61,7 @@ def test_const_ref():
 def test_deep_args():
     compile_test(
         fp='../examples/deep_arg.huff',
-        expected_deploy='60068060095f395ff36005565b5b5b',
+        expected_deploy='656005565b5b5b5f526006601af3',
         expected_runtime='6005565b5b5b'
     )
 
@@ -77,16 +77,16 @@ def test_simple_adjust():
 def test_includes():
     compile_test(
         fp='../examples/including.huff',
-        expected_deploy='60078060095f395ff301010362123456',
-        expected_runtime='01010362123456'
+        expected_deploy='66010103621234565f5260076019f3',
+        expected_runtime=' 01010362123456'
     )
 
 
 def test_functions():
     compile_test(
         fp='../examples/functions.huff',
-        expected_deploy='60188060095f395ff3630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3',
-        expected_runtime='630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3'
+        expected_deploy='77630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f35f5260186008f3',
+        expected_runtime=' 630dbe671f63cd580ff363ea11c61d63c593ffcf628a99f3'
     )
 
 
@@ -102,7 +102,7 @@ def test_return_runtime_built_in():
     compile_test(
         fp='../examples/small_constructor.huff',
         expected_deploy='600c8060095f395ff36020355f35015f5260205ff3',
-        expected_runtime='6020355f35015f5260205ff3'
+        expected_runtime='                 6020355f35015f5260205ff3'
     )
 
 
@@ -117,6 +117,6 @@ def test_runtime_code_built_in():
 def test_free_storage_pointer():
     compile_test(
         fp='../examples/free_storage_pointer.huff',
-        expected_deploy='60058060095f395ff35f60016002',
-        expected_runtime='5f60016002'
+        expected_deploy='645f600160025f526005601bf3',
+        expected_runtime=' 5f60016002'
     )
