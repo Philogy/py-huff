@@ -1,6 +1,6 @@
 from typing import NamedTuple
 from enum import Enum
-from .opcodes import Op, create_push, op
+from .opcodes import Op, create_push
 from .context import ObjectId
 from .utils import build_unique_dict
 

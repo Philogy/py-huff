@@ -135,11 +135,37 @@ def constructor_builtin(f: Callable[..., list[Asm]]):
 def gen_minimal_init(runtime: ObjectId, offset_op: Op) -> list[Asm]:
     return [
         to_size_mark_ref(runtime),   # [rsize]
-        op('dup1'),              # [rsize, rsize]
+        op('dup1'),                  # [rsize, rsize]
         to_start_mark_ref(runtime),  # [rsize, rsize, rstart]
-        offset_op,               # [rsize, rsize, rstart, offset]
-        op('codecopy'),          # [rsize]
-        offset_op,               # [rsize, offset]
+        offset_op,                   # [rsize, rsize, rstart, offset]
+        op('codecopy'),              # [rsize]
+        offset_op,                   # [rsize, offset]
+        op('return')
+    ]
+
+
+def num_to_push(num: int, alt: dict[int, Op] | None = None) -> Op:
+    alt_op = None if alt is None else alt.get(num)
+    if alt_op is not None:
+        return alt_op
+    return create_push(num.to_bytes(32, 'big'))
+
+
+def gen_tiny_init(runtime: bytes, zero_op: Op) -> list[Asm]:
+    assert len(runtime) <= 32, \
+        f'Runtime of size {len(runtime)} too large for "tiny" initializer'
+
+    if len(runtime) == 0:
+        return [op('stop')]
+
+    alts = {0: zero_op, 0x20: op('msize')}
+
+    return [
+        bytes_to_push(runtime),
+        zero_op,
+        op('mstore'),
+        num_to_push(len(runtime), alts),
+        num_to_push(0x20 - len(runtime), alts),
         op('return')
     ]
 
@@ -217,8 +243,8 @@ def invoke_built_in(fn_name: str, scope: Scope, args: list[InvokeArg]) -> list[A
 
 
 def gen_constants(
-        raw_constants: Iterable[tuple[Identifier, Optional[bytes]]],
-        constant_overrides: dict[Identifier, bytes]
+    raw_constants: Iterable[tuple[Identifier, Optional[bytes]]],
+    constant_overrides: dict[Identifier, bytes]
 ) -> dict[Identifier, Op]:
     constants: dict[Identifier, Op] = {}
     free_ptr: int = 0

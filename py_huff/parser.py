@@ -97,8 +97,8 @@ def literal_to_bytes(lit: str) -> bytes:
     return bytes.fromhex('0' * (len(lit) % 2) + lit)
 
 
-def bytes_to_push(data: bytes) -> Op:
-    if len(data) == 1 and data[0] == 0:
+def bytes_to_push(data: bytes, avoid_push0: bool = False) -> Op:
+    if len(data) == 1 and data[0] == 0 and not avoid_push0:
         return op('push0')
     return create_push(data)
 

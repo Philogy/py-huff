@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('--constant', '-c', action='append', default=[])
     parser.add_argument('--artifacts', '-a', nargs='?',
                         const='artifacts.json', default=None)
+    parser.add_argument('--avoid-push0', action='store_true')
     return parser.parse_args()
 
 
@@ -30,7 +31,7 @@ def main() -> None:
         assert name not in constant_overrides, f'Duplicate override for constant "{name}"'
         constant_overrides[name] = literal_to_bytes(value)
 
-    compiled = compile(args.path, constant_overrides)
+    compiled = compile(args.path, constant_overrides, args.avoid_push0)
 
     if args.runtime and args.deploy:
         print(f'bytecode: {compiled.deploy.hex()}')

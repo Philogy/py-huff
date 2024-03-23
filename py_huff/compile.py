@@ -1,5 +1,4 @@
 from typing import NamedTuple, Iterable
-import json
 from collections import defaultdict
 from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
 from .context import ContextTracker
@@ -11,10 +10,11 @@ from .parser import (
     Identifier, Macro, get_ident, parse_hex_literal, parse_macro, get_includes,
     parse_constant, parse_to_abi, Abi
 )
+from .assembler import Asm
 from .resolver import resolve
 from .codegen import (
     GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData,
-    gen_minimal_init, gen_constants
+    gen_minimal_init, gen_constants, gen_tiny_init
 )
 
 CompileResult = NamedTuple(
@@ -34,20 +34,21 @@ def idefs_to_defs(idefs: Iterable[ExNode]) -> dict[str, list[ExNode]]:
     return defs
 
 
-def compile(entry_fp: str, constant_overrides: dict[Identifier, bytes]) -> CompileResult:
-    return compile_from_defs(idefs_to_defs(resolve(entry_fp)), constant_overrides)
+def compile(entry_fp: str, constant_overrides: dict[Identifier, bytes], avoid_push0: bool) -> CompileResult:
+    return compile_from_defs(idefs_to_defs(resolve(entry_fp)), constant_overrides, avoid_push0)
 
 
-def compile_src(src: str, constant_overrides: dict[Identifier, bytes]) -> CompileResult:
+def compile_src(src: str, constant_overrides: dict[Identifier, bytes], avoid_push0: bool) -> CompileResult:
     root = lex_huff(src)
     includes, idefs = get_includes(root)
     assert not includes, f'Cannot compile directly from source if it contains includes'
-    return compile_from_defs(idefs_to_defs(idefs), constant_overrides)
+    return compile_from_defs(idefs_to_defs(idefs), constant_overrides, avoid_push0)
 
 
 def compile_from_defs(
-        defs: dict[str, list[ExNode]],
-        constant_overrides: dict[Identifier, bytes]
+    defs: dict[str, list[ExNode]],
+    constant_overrides: dict[Identifier, bytes],
+    avoid_push0: bool
 ) -> CompileResult:
 
     # TODO: Make sure constants, macros and code tables are unique
@@ -168,12 +169,16 @@ def compile_from_defs(
         ])
         deploy = asm_to_bytecode(init_asm)
     else:
-        init_asm = [
-            *gen_minimal_init(runtime_obj_id, op('push0')),
-            to_start_mark(runtime_obj_id),
-            runtime,
-            to_end_mark(runtime_obj_id)
-        ]
+        zero_op = op('returndatasize') if avoid_push0 else op('push0')
+        if len(runtime) <= 32:
+            init_asm: list[Asm] = gen_tiny_init(runtime, zero_op)
+        else:
+            init_asm: list[Asm] = [
+                *gen_minimal_init(runtime_obj_id, zero_op),
+                to_start_mark(runtime_obj_id),
+                runtime,
+                to_end_mark(runtime_obj_id)
+            ]
         deploy = asm_to_bytecode(init_asm)
 
     return CompileResult(
