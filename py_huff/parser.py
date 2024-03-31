@@ -1,19 +1,20 @@
-from typing import NamedTuple, Generator, Optional, Sequence
+from typing import NamedTuple, Generator, Optional
 from .node import ExNode, Content, ContentType
-from .opcodes import Op, OP_MAP, op, create_push
 
 Identifier = str
 MacroParam = NamedTuple('MacroParam', [('ident', Identifier)])
 GeneralRef = NamedTuple('GeneralRef', [('ident', Identifier)])
 ConstRef = NamedTuple('ConstRef', [('ident', Identifier)])
 LabelDef = NamedTuple('LabelDef', [('ident', Identifier)])
-InvokeArg = Op | GeneralRef | MacroParam
+
+Literal = NamedTuple('Literal', [('data', bytes), ('size', int | None)])
+
+InvokeArg = Literal | GeneralRef | MacroParam
 Invocation = NamedTuple(
     'Invocation',
     [('ident', Identifier), ('args', list[InvokeArg])]
 )
-
-MacroElement = Invocation | Op | MacroParam | GeneralRef | LabelDef | ConstRef
+MacroElement = Invocation | Literal | MacroParam | GeneralRef | LabelDef | ConstRef
 
 Macro = NamedTuple('Macro', [
     ('ident', Identifier),
@@ -24,7 +25,6 @@ Macro = NamedTuple('Macro', [
 
 def identifier(s: Content) -> Identifier:
     assert isinstance(s, str), f'Cannot create identifier from {s}'
-    assert s not in OP_MAP, f'Valid opcode {s} cannot be identifier'
     return s
 
 
@@ -97,22 +97,15 @@ def literal_to_bytes(lit: str) -> bytes:
     return bytes.fromhex('0' * (len(lit) % 2) + lit)
 
 
-def bytes_to_push(data: bytes, avoid_push0: bool = False) -> Op:
-    if len(data) == 1 and data[0] == 0 and not avoid_push0:
-        return op('push0')
-    return create_push(data)
-
-
 def parse_hex_literal(el: ExNode) -> bytes:
     assert el.name == 'hex_literal'
     lit = el.get_idx(1).text()
     return literal_to_bytes(lit)
 
 
-def parse_call_arg(arg: ExNode):
+def parse_call_arg(arg: ExNode) -> InvokeArg:
     el = parse_el(arg)
-    assert isinstance(el, (GeneralRef, Op, MacroParam)), \
-        f'Invalid call argument {el}'
+    assert isinstance(el, InvokeArg), f'Invalid call argument {el}'
     return el
 
 
@@ -120,7 +113,7 @@ def parse_el(el: ExNode) -> MacroElement:
     el = el.get_idx(0)
     name = el.name
     if name == 'hex_literal':
-        return bytes_to_push(parse_hex_literal(el))
+        return Literal(parse_hex_literal(el), None)
     elif name == 'macro_arg':
         return MacroParam(get_ident(el))
     elif name == 'invocation':
@@ -130,10 +123,7 @@ def parse_el(el: ExNode) -> MacroElement:
         )
     elif name == 'identifier':
         ident = el.text()
-        if ident in OP_MAP:
-            return op(ident)
-        else:
-            return GeneralRef(identifier(ident))
+        return GeneralRef(identifier(ident))
     elif name == 'dest_definition':
         return LabelDef(get_ident(el))
     elif name == 'const_ref':
@@ -141,7 +131,7 @@ def parse_el(el: ExNode) -> MacroElement:
     elif name == 'push_op':
         num = int(el.get('num').text())
         data = parse_hex_literal(el.get('hex_literal'))
-        return create_push(data, num)
+        return Literal(data, num)
 
     raise ValueError(f'Unrecognized el name "{name}"')
 

@@ -13,7 +13,7 @@ from .parser import (
 from .assembler import Asm
 from .resolver import resolve
 from .codegen import (
-    GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData,
+    CompileOptions, GlobalScope, Scope, expand_macro_to_asm, CodeTable, ConstructorData,
     gen_minimal_init, gen_constants, gen_tiny_init
 )
 
@@ -126,6 +126,7 @@ def compile_from_defs(
     )
     main_scope = Scope(globals, None)
     runtime_asm = expand_macro_to_asm(
+        CompileOptions(avoid_push0),
         'MAIN',
         main_scope,
         [],
@@ -148,6 +149,7 @@ def compile_from_defs(
     if 'CONSTRUCTOR' in macros:
         init_scope = Scope(globals, ConstructorData(runtime_obj_id))
         init_asm = expand_macro_to_asm(
+            CompileOptions(avoid_push0),
             'CONSTRUCTOR',
             init_scope,
             [],

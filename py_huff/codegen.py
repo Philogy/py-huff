@@ -3,7 +3,7 @@ import inspect
 from .lexer import ExNode
 from .assembler import *
 from .parser import *
-from .opcodes import OP_MAP, Op
+from .opcodes import OP_MAP, Op, op
 from .context import ContextTracker
 from .utils import s, keccak256, set_unique, byte_size
 
@@ -37,6 +37,15 @@ GlobalScope = NamedTuple(
         ('errors', dict[Identifier, ExNode])
     ]
 )
+
+CompileOptions = NamedTuple(
+    'CompileOptions',
+    [
+        ('avoid_push0', bool)
+    ]
+)
+
+InvokeValue = MacroArg | GeneralRef | MacroParam
 
 
 class Scope:
@@ -83,7 +92,7 @@ def not_implemented(fn_name, *_) -> list[Asm]:
     raise ValueError(f'Built-in {fn_name} not implemented yet')
 
 
-def validate_params(name: str, args: list[InvokeArg], params: list[inspect.Parameter]):
+def validate_params(name: str, args: list[InvokeValue], params: list[inspect.Parameter]):
     for i, (arg, param) in enumerate(zip(args, params), start=1):
         assert isinstance(arg, param.annotation) or param.annotation is inspect._empty, \
             f'{name}: Invalid type {type(arg).__name__} found for arg {i} "{param.name}", expected {param.annotation.__name__}'
@@ -96,7 +105,7 @@ def validate_params(name: str, args: list[InvokeArg], params: list[inspect.Param
 def builtin(f: Callable[..., list[Asm]]):
     params = list(inspect.signature(f).parameters.values())
 
-    def inner_builtin(name: str, scope: Scope, args: list[InvokeArg]) -> list[Asm]:
+    def inner_builtin(name: str, scope: Scope, args: list[InvokeValue]) -> list[Asm]:
         validate_params(
             name,
             args,
@@ -120,7 +129,8 @@ def constructor_builtin(f: Callable[..., list[Asm]]):
     assert valid_annotation(params[1], ConstructorData), \
         f'Constructor built-in must accept `ConstructorData` as second input (found {params[1].annotation})'
 
-    def inner_builtin(name: str, scope: Scope, args: list[InvokeArg]) -> list[Asm]:
+    def inner_builtin(name: str, scope: Scope, args: list[InvokeValue]) -> list[Asm]:
+        print(f'args: {args}')
         validate_params(
             name,
             args,
@@ -142,6 +152,16 @@ def gen_minimal_init(runtime: ObjectId, offset_op: Op) -> list[Asm]:
         offset_op,                   # [rsize, offset]
         op('return')
     ]
+
+
+def bytes_to_push(data: bytes, size: int | None = None, avoid_push0: bool = False) -> Op:
+    if len(data) == 1 and data[0] == 0 and not avoid_push0:
+        return op('push0')
+    return create_push(data, size)
+
+
+def compile_literal(coptions: CompileOptions, literal: Literal) -> Op:
+    return bytes_to_push(literal.data, literal.size, coptions.avoid_push0)
 
 
 def num_to_push(num: int, alt: dict[int, Op] | None = None) -> Op:
@@ -224,7 +244,7 @@ def return_runtime(_, cdata: ConstructorData, offset_op: Op) -> list[Asm]:
     return gen_minimal_init(cdata.runtime, offset_op)
 
 
-BUILT_INS: dict[str, Callable[[str, Scope, list[InvokeArg]], list[Asm]]] = {
+BUILT_INS: dict[str, Callable[[str, Scope, list[InvokeValue]], list[Asm]]] = {
     '__codesize': not_implemented,
 
     '__EVENT_HASH': event_hash,
@@ -237,7 +257,7 @@ BUILT_INS: dict[str, Callable[[str, Scope, list[InvokeArg]], list[Asm]]] = {
 }
 
 
-def invoke_built_in(fn_name: str, scope: Scope, args: list[InvokeArg]) -> list[Asm]:
+def invoke_built_in(fn_name: str, scope: Scope, args: list[InvokeValue]) -> list[Asm]:
     assert fn_name in BUILT_INS, f'Unrecognized built-in "{fn_name}"'
     return BUILT_INS[fn_name](fn_name, scope, args)
 
@@ -268,6 +288,7 @@ def gen_constants(
 
 
 def expand_macro_to_asm(
+    coptions: CompileOptions,
     macro_ident: Identifier,
     scope: Scope,
     args: list[MacroArg],
@@ -311,36 +332,58 @@ def expand_macro_to_asm(
         return ident_to_arg[ident]
 
     for el in macro.body:
-        if isinstance(el, Op):
-            asm.append(el)
+        if isinstance(el, Literal):
+            asm.append(compile_literal(coptions, el))
         elif isinstance(el, LabelDef):
             asm.extend([Mark(labels[el.ident]), Op(OP_MAP['jumpdest'], b'')])
         elif isinstance(el, GeneralRef):
-            asm.append(lookup_label(el.ident))
+            if el.ident in OP_MAP:
+                asm.append(op(el.ident))
+            else:
+                asm.append(lookup_label(el.ident))
         elif isinstance(el, MacroParam):
             asm.append(lookup_arg(el.ident))
         elif isinstance(el, ConstRef):
             asm.append(scope.get_constant(el.ident))
         elif isinstance(el, Invocation):
             if el.ident in BUILT_INS:
+                invoke_values: list[InvokeValue] = []
+                for arg in el.args:
+                    if isinstance(arg, GeneralRef):
+                        if arg.ident in OP_MAP:
+                            invoke_values.append(op(arg.ident))
+                        else:
+                            invoke_values.append(arg)
+                    elif isinstance(arg, MacroParam):
+                        invoke_values.append(lookup_arg(arg.ident))
+                    elif isinstance(arg, Literal):
+                        invoke_values.append(compile_literal(coptions, arg))
+                    else:
+                        raise TypeError(
+                            f'Unrecognized built-in invocation argument {arg}'
+                        )
                 asm.extend(
-                    invoke_built_in(el.ident, scope, el.args)
+                    invoke_built_in(el.ident, scope, invoke_values)
                 )
             else:
                 invoke_args: list[MacroArg] = []
                 for arg in el.args:
                     if isinstance(arg, GeneralRef):
-                        invoke_args.append(lookup_label(arg.ident))
+                        if arg.ident in OP_MAP:
+                            invoke_args.append(op(arg.ident))
+                        else:
+                            invoke_args.append(lookup_label(arg.ident))
                     elif isinstance(arg, MacroParam):
                         invoke_args.append(lookup_arg(arg.ident))
-                    elif isinstance(arg, Op):
-                        invoke_args.append(arg)
+                    elif isinstance(arg, Literal):
+                        invoke_args.append(compile_literal(coptions, arg))
                     else:
                         raise TypeError(
                             f'Unrecognized macro invocation argument {arg}'
                         )
                 asm.extend(
                     expand_macro_to_asm(
+                        coptions,
                         el.ident,
                         scope,
                         invoke_args,
