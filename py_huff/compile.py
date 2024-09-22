@@ -1,4 +1,4 @@
-from typing import NamedTuple, Iterable
+from typing import NamedTuple, Iterable, Optional
 from collections import defaultdict
 from .assembler import asm_to_bytecode, to_start_mark, to_end_mark
 from .context import ContextTracker
@@ -34,21 +34,37 @@ def idefs_to_defs(idefs: Iterable[ExNode]) -> dict[str, list[ExNode]]:
     return defs
 
 
-def compile(entry_fp: str, constant_overrides: dict[Identifier, bytes], avoid_push0: bool) -> CompileResult:
-    return compile_from_defs(idefs_to_defs(resolve(entry_fp)), constant_overrides, avoid_push0)
+def compile(
+    entry_fp: str,
+    constant_overrides: dict[Identifier, bytes],
+    avoid_push0: bool,
+    offset: Optional[int] = None
+) -> CompileResult:
+    return compile_from_defs(
+        idefs_to_defs(resolve(entry_fp)),
+        constant_overrides,
+        avoid_push0,
+        offset
+    )
 
 
-def compile_src(src: str, constant_overrides: dict[Identifier, bytes], avoid_push0: bool) -> CompileResult:
+def compile_src(
+    src: str,
+    constant_overrides: dict[Identifier, bytes],
+    avoid_push0: bool,
+    offset: Optional[int] = None
+) -> CompileResult:
     root = lex_huff(src)
     includes, idefs = get_includes(root)
     assert not includes, f'Cannot compile directly from source if it contains includes'
-    return compile_from_defs(idefs_to_defs(idefs), constant_overrides, avoid_push0)
+    return compile_from_defs(idefs_to_defs(idefs), constant_overrides, avoid_push0, offset)
 
 
 def compile_from_defs(
     defs: dict[str, list[ExNode]],
     constant_overrides: dict[Identifier, bytes],
-    avoid_push0: bool
+    avoid_push0: bool,
+    offset: Optional[int]
 ) -> CompileResult:
 
     # TODO: Make sure constants, macros and code tables are unique
@@ -143,7 +159,17 @@ def compile_from_defs(
             to_end_mark(code_table.obj_id)
         ])
 
-    runtime = asm_to_bytecode(runtime_asm)
+    if offset is None:
+        input_asm = runtime_asm
+    else:
+        input_asm = [b'\x00' * offset] + runtime_asm
+
+    output_runtime = asm_to_bytecode(input_asm)
+
+    if offset is None:
+        runtime = output_runtime
+    else:
+        runtime = output_runtime[offset:]
 
     runtime_obj_id = context.next_obj_id()
     if 'CONSTRUCTOR' in macros:

@@ -10,12 +10,17 @@ def parse_args():
         description='A CLI for compiling Huff source code files to bytecode'
     )
     parser.add_argument('path', type=str)
+    parser.add_argument('--size', '-z', action='store_true')
     parser.add_argument('--runtime', '-r', action='store_true')
     parser.add_argument('--deploy', '-b', action='store_true')
     parser.add_argument('--constant', '-c', action='append', default=[])
     parser.add_argument('--artifacts', '-a', nargs='?',
                         const='artifacts.json', default=None)
     parser.add_argument('--avoid-push0', action='store_true')
+    parser.add_argument(
+        '--offset',
+        help='Offsets all JUMPDESTs as if the code started at the supplied PC'
+    )
     return parser.parse_args()
 
 
@@ -31,7 +36,16 @@ def main() -> None:
         assert name not in constant_overrides, f'Duplicate override for constant "{name}"'
         constant_overrides[name] = literal_to_bytes(value)
 
-    compiled = compile(args.path, constant_overrides, args.avoid_push0)
+    if args.offset is None:
+        offset = None
+    elif args.offset.startswith('0x'):
+        offset = int(args.offset[2:], 16)
+    elif args.offset.isdigit():
+        offset = int(args.offset)
+    else:
+        assert False, f'Invalid offset: {args.offset}'
+
+    compiled = compile(args.path, constant_overrides, args.avoid_push0, offset)
 
     if args.runtime and args.deploy:
         print(f'bytecode: {compiled.deploy.hex()}')
@@ -42,6 +56,11 @@ def main() -> None:
         print(compiled.deploy.hex())
     else:
         print('WARNING: Neither runtime or deploy bytecode output')
+
+    if args.size:
+        print(f'Sizes:')
+        print(f'  deploy: {len(compiled.deploy) / 1e3:,.3f} kB')
+        print(f'  runtime: {len(compiled.runtime) / 1e3:,.3f} kB')
 
     if args.artifacts is not None:
         with open(args.artifacts, 'w') as f:

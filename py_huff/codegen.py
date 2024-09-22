@@ -130,7 +130,6 @@ def constructor_builtin(f: Callable[..., list[Asm]]):
         f'Constructor built-in must accept `ConstructorData` as second input (found {params[1].annotation})'
 
     def inner_builtin(name: str, scope: Scope, args: list[InvokeValue]) -> list[Asm]:
-        print(f'args: {args}')
         validate_params(
             name,
             args,

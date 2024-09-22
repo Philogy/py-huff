@@ -1,0 +1,6 @@
+#define macro MAIN() = takes(0) returns(0) {
+    pad (16) {
+        // 0x18 0x0 mstore
+        // 0x20 0x0 return
+    }
+}
